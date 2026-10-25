@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Net Sentinel — Cybersecurity & Digital Forensics</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand-area">
+                <i class="fa-solid fa-shield-halved brand-icon"></i>
+                <div class="brand-text">
+                    <h2>Net Sentinel</h2>
+                    <span>Security & Forensics</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-target="overview-view">
+                    <i class="fa-solid fa-chart-pie"></i> Overview
+                </a>
+                <a href="#" class="nav-item" data-target="network-view">
+                    <i class="fa-solid fa-network-wired"></i> Network Security
+                </a>
+                <a href="#" class="nav-item" data-target="devices-view">
+                    <i class="fa-solid fa-laptop-code"></i> Device Inventory
+                </a>
+                <a href="#" class="nav-item" data-target="investigations-view">
+                    <i class="fa-solid fa-folder-open"></i> Investigations
+                </a>
+                <a href="#" class="nav-item" data-target="stego-view">
+                    <i class="fa-solid fa-eye-slash"></i> Steganography Lab
+                </a>
+                <a href="#" class="nav-item" data-target="forensics-view">
+                    <i class="fa-solid fa-magnifying-glass-chart"></i> Image Forensics
+                </a>
+                <a href="#" class="nav-item" data-target="integrity-view">
+                    <i class="fa-solid fa-fingerprint"></i> Integrity Verification
+                </a>
+                <a href="#" class="nav-item" data-target="reports-view">
+                    <i class="fa-solid fa-file-contract"></i> Reports & Export
+                </a>
+                <a href="#" class="nav-item" data-target="settings-view">
+                    <i class="fa-solid fa-gear"></i> Settings
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-badge demo-badge">
+                    <i class="fa-solid fa-circle"></i> Demo Mode Active
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Navigation Bar -->
+            <header class="top-nav">
+                <div class="breadcrumb">
+                    <span id="current-page-title">Overview Dashboard</span>
+                </div>
+                <div class="top-nav-right">
+                    <div class="search-box">
+                        <i class="fa-solid fa-search"></i>
+                        <input type="text" placeholder="Search investigations, hashes..." id="global-search" />
+                    </div>
+                    <div class="system-status">
+                        <span class="pulse-dot"></span> Agent: Standalone
+                    </div>
+                </div>
+            </header>
+
+            <!-- Views Container -->
+            <div class="views-wrapper">
+
+                <!-- 1. OVERVIEW VIEW -->
+                <section id="overview-view" class="view-panel active">
+                    <div class="welcome-banner">
+                        <div class="banner-text">
+                            <h1>Network Intelligence. Threat Detection. Digital Forensics.</h1>
+                            <p>Authorized security monitoring, explainable anomaly detection, steganography analysis, and file integrity verification for academic & operational environments.</p>
+                        </div>
+                        <div class="banner-actions">
+                            <button class="btn btn-primary" onclick="switchView('investigations-view')">
+                                <i class="fa-solid fa-plus"></i> New Investigation
+                            </button>
+                            <button class="btn btn-secondary" onclick="switchView('network-view')">
+                                <i class="fa-solid fa-shield"></i> Network Security
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-folder-tree"></i></div>
+                            <div class="metric-info">
+                                <span class="metric-label">Investigations</span>
+                                <h3 id="stat-investigations">0</h3>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-laptop"></i></div>
+                            <div class="metric-info">
+                                <span class="metric-label">Tracked Devices</span>
+                                <h3 id="stat-devices">0</h3>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-shield-check"></i></div>
+                            <div class="metric-info">
+                                <span class="metric-label">Integrity Baselines</span>
+                                <h3 id="stat-baselines">0</h3>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                            <div class="metric-info">
+                                <span class="metric-label">Active Alerts</span>
+                                <h3 id="stat-alerts">0</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <h2>Quick Tools</h2>
+                            <div class="quick-tools-grid">
+                                <button class="tool-btn" onclick="switchView('stego-view')">
+                                    <i class="fa-solid fa-eye-slash"></i>
+                                    <span>Embed Secret</span>
+                                </button>
+                                <button class="tool-btn" onclick="switchView('stego-view')">
+                                    <i class="fa-solid fa-key"></i>
+                                    <span>Extract Secret</span>
+                                </button>
+                                <button class="tool-btn" onclick="switchView('forensics-view')">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <span>Analyze Image</span>
+                                </button>
+                                <button class="tool-btn" onclick="switchView('integrity-view')">
+                                    <i class="fa-solid fa-fingerprint"></i>
+                                    <span>Verify Integrity</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h2>Recent Investigations</h2>
+                            <div id="recent-investigations-list" class="recent-list">
+                                <p class="empty-text">No active investigations recorded.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. NETWORK SECURITY VIEW -->
+                <section id="network-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>Network Security & Log Analysis</h2>
+                        <p>Upload network connection log CSV files or run heuristic threat detection rules (Port Scans, Connection Bursts, Brute Force).</p>
+                    </div>
+
+                    <div class="card">
+                        <h3>Upload Connection Logs (CSV)</h3>
+                        <form id="network-upload-form" class="upload-box">
+                            <input type="file" id="log-file-input" accept=".csv" required />
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-microchip"></i> Analyze Traffic Logs
+                            </button>
+                        </form>
+                    </div>
+
+                    <div id="network-results-container" class="card hidden">
+                        <h3>Analysis Results & Explainable Alerts</h3>
+                        <div id="network-summary-stats" class="summary-pills"></div>
+                        <div class="table-container">
+                            <table id="network-events-table">
+                               <thead>
+                                   <tr>
+                                       <th>Timestamp</th>
+                                       <th>Severity</th>
+                                       <th>Rule</th>
+                                       <th>Source IP</th>
+                                       <th>Destination IP</th>
+                                       <th>Observed</th>
+                                       <th>Recommended Action</th>
+                                   </tr>
+                               </thead>
+                               <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. DEVICE INVENTORY VIEW -->
+                <section id="devices-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>Device & Host Inventory</h2>
+                        <p>Tracked devices and observed endpoints in the current environment.</p>
+                    </div>
+                    <div class="card">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Device ID</th>
+                                        <th>IP Address</th>
+                                        <th>MAC Address</th>
+                                        <th>Status</th>
+                                        <th>Observation Source</th>
+                                        <th>Last Seen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>DEV-001 (Local Gateway)</td>
+                                        <td><code>192.168.1.1</code></td>
+                                        <td><code>a1:b2:c3:d4:e5:f6</code></td>
+                                        <td><span class="badge badge-success">Active</span></td>
+                                        <td>ARP Cache / Gateway</td>
+                                        <td>Just now</td>
+                                    </tr>
+                                    <tr>
+                                        <td>DEV-002 (Analysis Node)</td>
+                                        <td><code>192.168.1.50</code></td>
+                                        <td><code>f6:e5:d4:c3:b2:a1</code></td>
+                                        <td><span class="badge badge-success">Active</span></td>
+                                        <td>Local Interface</td>
+                                        <td>Just now</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. INVESTIGATIONS VIEW -->
+                <section id="investigations-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>Digital Forensics Investigations</h2>
+                        <p>Manage cases, associate evidence hashes, and track findings.</p>
+                        <button class="btn btn-primary" onclick="openNewInvestigationModal()">
+                            <i class="fa-solid fa-plus"></i> New Case
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <div class="table-container">
+                            <table id="investigations-table">
+                                <thead>
+                                    <tr>
+                                        <th>Case ID</th>
+                                        <th>Title</th>
+                                        <th>Reference</th>
+                                        <th>Status</th>
+                                        <th>Created</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5. STEGANOGRAPHY LAB VIEW -->
+                <section id="stego-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>Steganography Lab</h2>
+                        <p>Embed or extract covert text payloads inside lossless cover images using LSB manipulation.</p>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="card">
+                            <h3>Embed Secret Payload</h3>
+                            <form id="embed-form">
+                                <div class="form-group">
+                                    <label>Cover Image (PNG)</label>
+                                    <input type="file" id="embed-image" accept="image/png" required />
+                                </div>
+                                <div class="form-group">
+                                    <label>Secret Payload / Text</label>
+                                    <textarea id="embed-secret" rows="4" placeholder="Enter confidential message..." required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fa-solid fa-lock"></i> Embed & Encode
+                                </button>
+                            </form>
+                            <div id="embed-result" class="result-box hidden"></div>
+                        </div>
+
+                        <div class="card">
+                            <h3>Extract Secret Payload</h3>
+                            <form id="extract-form">
+                                <div class="form-group">
+                                    <label>Encoded Image (PNG)</label>
+                                    <input type="file" id="extract-image" accept="image/png" required />
+                                </div>
+                                <button type="submit" class="btn btn-secondary">
+                                    <i class="fa-solid fa-key"></i> Extract Message
+                                </button>
+                            </form>
+                            <div id="extract-result" class="result-box hidden">
+                                <strong>Extracted Secret:</strong>
+                                <pre id="extracted-text-output"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6. IMAGE FORENSICS VIEW -->
+                <section id="forensics-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>Image Forensics & Heuristics</h2>
+                        <p>Analyze image metadata, file hashes, and statistical LSB noise distribution.</p>
+                    </div>
+
+                    <div class="card">
+                        <form id="forensics-form" class="upload-box">
+                            <input type="file" id="forensics-file" accept="image/*" required />
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-magnifying-glass-chart"></i> Run Forensics Inspection
+                            </button>
+                        </form>
+                    </div>
+
+                    <div id="forensics-results" class="card hidden">
+                        <h3>Forensic Analysis Report</h3>
+                        <div class="forensics-grid" id="forensics-details"></div>
+                    </div>
+                </section>
+
+                <!-- 7. INTEGRITY VERIFICATION VIEW -->
+                <section id="integrity-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>File Integrity Verification (SHA-256)</h2>
+                        <p>Calculate cryptographic file hashes and compare them against trusted baselines.</p>
+                    </div>
+
+                    <div class="card">
+                        <form id="integrity-form">
+                            <div class="form-group">
+                                <label>Target File</label>
+                                <input type="file" id="integrity-file" required />
+                            </div>
+                            <div class="form-group">
+                                <label>Trusted Reference Hash (SHA-256, Optional)</label>
+                                <input type="text" id="integrity-ref" placeholder="e.g. e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" />
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-fingerprint"></i> Verify Hash & Baseline
+                            </button>
+                        </form>
+                        <div id="integrity-result" class="result-box hidden"></div>
+                    </div>
+                </section>
+
+                <!-- 8. REPORTS VIEW -->
+                <section id="reports-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>Investigation Reports & Export</h2>
+                        <p>Export comprehensive security and forensics reports for audit or presentation.</p>
+                    </div>
+
+                    <div class="card">
+                        <button class="btn btn-primary" onclick="generateReport()">
+                            <i class="fa-solid fa-download"></i> Download Full JSON Report
+                        </button>
+                        <div id="report-preview" class="report-preview hidden">
+                            <pre id="report-json-output"></pre>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 9. SETTINGS VIEW -->
+                <section id="settings-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>Platform Settings</h2>
+                        <p>Configure detection thresholds and operational modes.</p>
+                    </div>
+
+                    <div class="card">
+                        <h3>Configuration</h3>
+                        <div class="setting-item">
+                            <span>Operating Mode</span>
+                            <span class="badge badge-info">Demo & Investigation Mode</span>
+                        </div>
+                        <div class="setting-item">
+                            <span>Source Burst Threshold</span>
+                            <code>10 connections / min</code>
+                        </div>
+                        <div class="setting-item">
+                            <span>Destination Flood Threshold</span>
+                            <code>20 connections / min</code>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- New Investigation Modal -->
+    <div id="investigation-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Create New Investigation Case</h3>
+            <form id="new-investigation-form">
+                <div class="form-group">
+                    <label>Case Title</label>
+                    <input type="text" id="inv-title" placeholder="e.g. Unauthorized Traffic Analysis" required />
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="inv-desc" rows="3" placeholder="Case notes and objectives..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Reference Number</label>
+                    <input type="text" id="inv-ref" placeholder="e.g. INC-2026-004" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Case</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
