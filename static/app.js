@@ -456,45 +456,14 @@ function closeModal() {
     document.getElementById("investigation-modal").classList.add("hidden");
 }
 
-async function triggerAttackSimulation() {
-    const scenario = document.getElementById("attack-scenario").value;
-    const formData = new URLSearchParams();
-    formData.append("scenario", scenario);
-
+async function generateReport() {
     try {
-        const res = await fetch("/api/telemetry/simulate", {
-            method: "POST",
-            body: formData
-        });
+        const res = await fetch("/api/reports/export");
         const data = await res.json();
-        if (res.ok) {
-            loadTelemetryGraph();
-            if (data.simulated_events && data.simulated_events.length > 0) {
-                switchView('network-view');
-                renderNetworkResults({ 
-                    events: data.simulated_events, 
-                    summary: { total: data.simulated_events.length, by_severity: { high: 1, medium: 0, low: 0 } } 
-                });
-            }
-        } else {
-            alert(data.detail || "Simulation failed");
-        }
+        const preview = document.getElementById("report-preview");
+        preview.classList.remove("hidden");
+        document.getElementById("report-json-output").textContent = JSON.stringify(data, null, 2);
     } catch (err) {
-        alert("Simulation request failed.");
-    }
-}
-
-async function resetAttackSimulation() {
-    const formData = new URLSearchParams();
-    formData.append("scenario", "reset");
-
-    try {
-        await fetch("/api/telemetry/simulate", {
-            method: "POST",
-            body: formData
-        });
-        loadTelemetryGraph();
-    } catch (err) {
-        alert("Reset failed.");
+        alert("Failed to generate report.");
     }
 }
