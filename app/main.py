@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .services import analyze_logs, summarize
-from .database import get_db_connection
+from .database import get_db_connection, init_db
 from .stego_service import (
     calculate_sha256,
     embed_secret_in_image,
@@ -23,6 +23,10 @@ from .stego_service import (
 )
 
 app = FastAPI(title="Net Sentinel", version="1.0.0")
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -46,21 +50,22 @@ async def dashboard_spa(request: Request):
 async def api_overview():
     """Get overview statistics for the dashboard."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) FROM investigations")
-    inv_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM investigations")
+        inv_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM devices")
-    device_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM devices")
+        device_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM integrity_baselines")
-    baseline_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM integrity_baselines")
+        baseline_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT * FROM investigations ORDER BY created_at DESC LIMIT 5")
-    recent_investigations = [dict(row) for row in cursor.fetchall()]
-
-    conn.close()
+        cursor.execute("SELECT * FROM investigations ORDER BY created_at DESC LIMIT 5")
+        recent_investigations = [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
     return {
         "investigations_count": inv_count,
@@ -149,10 +154,12 @@ async def api_analyze_network_logs(file: UploadFile = File(...)):
 @app.get("/api/investigations")
 async def api_get_investigations():
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM investigations ORDER BY created_at DESC")
-    rows = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM investigations ORDER BY created_at DESC")
+        rows = [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
     return rows
 
 
@@ -164,16 +171,18 @@ async def api_create_investigation(
 ):
     inv_id = f"INV-{int(datetime.utcnow().timestamp())}"
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO investigations (id, title, description, case_ref, status)
-        VALUES (?, ?, ?, ?, 'Open')
-        """,
-        (inv_id, title, description, case_ref),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO investigations (id, title, description, case_ref, status)
+            VALUES (?, ?, ?, ?, 'Open')
+            """,
+            (inv_id, title, description, case_ref),
+        )
+        conn.commit()
+    finally:
+        conn.close()
     return {"id": inv_id, "title": title, "status": "Open", "message": "Investigation created successfully"}
 
 
