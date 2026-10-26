@@ -1,9 +1,13 @@
-// Net Sentinel Frontend Controller
+// Net Sentinel Frontend Controller — Enhanced with Cybersecurity Theme
 let telemetryLiveInterval = null;
 let telemetryPaused = false;
 let latestTelemetryData = null;
+let localSimulationActive = false;
+let localActiveScenario = null;
 
+// Font loading indicator
 document.addEventListener("DOMContentLoaded", () => {
+    initFontFaceSupport();
     initNavigation();
     loadOverviewData();
     loadInvestigations();
@@ -11,6 +15,19 @@ document.addEventListener("DOMContentLoaded", () => {
     initTelemetryChart();
 });
 
+// Support JetBrains Mono font rendering
+function initFontFaceSupport() {
+    const style = document.createElement('style');
+    style.textContent = `
+        @font-face {
+            font-family: 'Cyber Mono';
+            src: local('JetBrains Mono');
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Initialize navigation with smooth transitions
 function initNavigation() {
     const navItems = document.querySelectorAll(".nav-item");
     navItems.forEach(item => {
@@ -22,24 +39,49 @@ function initNavigation() {
     });
 }
 
+// View switching with fade animation
 function switchView(targetId) {
-    document.querySelectorAll(".nav-item").forEach(nav => nav.classList.remove("active"));
-    document.querySelectorAll(".view-panel").forEach(panel => panel.classList.remove("active"));
+    const navItems = document.querySelectorAll(".nav-item");
+    const viewPanels = document.querySelectorAll(".view-panel");
 
-    const activeNav = document.querySelector(`.nav-item[data-target="${targetId}"]`);
-    const activePanel = document.getElementById(targetId);
+    // Fade out current views
+    viewPanels.forEach(panel => {
+        panel.style.opacity = "0";
+        panel.style.transition = "opacity 0.3s ease";
+    });
 
-    if (activeNav) activeNav.classList.add("active");
-    if (activePanel) {
-        activePanel.classList.add("active");
-        const titleText = activeNav ? activeNav.textContent.trim() : "Dashboard";
-        document.getElementById("current-page-title").textContent = titleText;
-        if (targetId === "overview-view") {
-            setTimeout(renderTelemetryChart, 50);
+    // Remove active classes after transition
+    setTimeout(() => {
+        navItems.forEach(nav => nav.classList.remove("active"));
+        viewPanels.forEach(panel => {
+            panel.classList.remove("active");
+            panel.style.display = "none";
+        });
+
+        // Show and fade in new view
+        const activeNav = document.querySelector(`.nav-item[data-target="${targetId}"]`);
+        const activePanel = document.getElementById(targetId);
+
+        if (activeNav) activeNav.classList.add("active");
+        if (activePanel) {
+            activePanel.style.display = "block";
+            // Trigger reflow for fade-in
+            void activePanel.offsetWidth;
+            activePanel.style.opacity = "1";
         }
+
+        // Update page title
+        const titleText = activeNav ? activeNav.textContent.trim() : "Net Sentinel";
+        document.getElementById("current-page-title").textContent = titleText;
+    }, 300);
+
+    // Special handling for overview to restart telemetry chart
+    if (targetId === "overview-view") {
+        setTimeout(renderTelemetryChart, 350);
     }
 }
 
+// Load overview metrics from API
 async function loadOverviewData() {
     try {
         const res = await fetch("/api/overview");
@@ -53,64 +95,89 @@ async function loadOverviewData() {
         const recentList = document.getElementById("recent-investigations-list");
         if (data.recent_investigations && data.recent_investigations.length > 0) {
             recentList.innerHTML = data.recent_investigations.map(inv => `
-                <div style="padding: 10px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div style="padding: 8px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
                     <div><strong>${inv.id}</strong>: ${inv.title}</div>
                     <span class="badge badge-info">${inv.status}</span>
                 </div>
             `).join("");
+        } else {
+            recentList.innerHTML = `<p style="color: var(--text-secondary); padding: 16px; font-style: italic;">No active investigations recorded.</p>`;
         }
     } catch (err) {
         console.error("Failed to load overview metrics", err);
+        showNotification("Unable to load dashboard data", "error");
     }
 }
 
-// --- Telemetry Chart & Live Feed (Local Fallback Simulator Enabled) ---
-let localSimulationActive = false;
-let localActiveScenario = null;
+// --- Telemetry Chart & Live Feed ---
+function renderTelemetryChart() {
+    if (!latestTelemetryData || !latestTelemetryData.series) return;
+    const canvas = document.getElementById("telemetry-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const metric = document.getElementById("telemetry-metric").value;
 
-async function loadTelemetryGraph() {
-    const rangeElem = document.getElementById("telemetry-range");
-    const range = rangeElem ? rangeElem.value : "1h";
-    
-    try {
-        const res = await fetch(`/api/telemetry?range=${range}`);
-        if (res.ok) {
-            const data = await res.json();
-            latestTelemetryData = data;
-            const banner = document.getElementById("simulation-banner");
-            if (banner) {
-                if (data.simulation_active) {
-                    banner.style.display = "inline-block";
-                    banner.textContent = `⚠️ DEMO MODE — SIMULATED ATTACK ACTIVE (${data.active_scenario.toUpperCase()})`;
-                } else if (localSimulationActive) {
-                    banner.style.display = "inline-block";
-                    banner.textContent = `⚠️ DEMO MODE — LOCAL SIMULATION ACTIVE (${localActiveScenario.toUpperCase()})`;
-                } else {
-                    banner.style.display = "none";
-                }
-            }
-            renderTelemetryChart();
-            return;
-        }
-    } catch (err) {
-        // Fall back gracefully to local synthetic generator when API fails
+    const containerWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 600;
+    canvas.width = Math.max(containerWidth - 24, 300);
+    canvas.height = 180;
+
+    const series = latestTelemetryData.series;
+    const values = series.map(s => {
+        if (metric === "bandwidth") return s.inbound_mbps;
+        if (metric === "packets") return s.packets_per_sec;
+        return s.latency_ms;
+    });
+
+    const maxVal = Math.max(...values, 10);
+    const minVal = 0;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw subtle grid lines
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+        let y = (height / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
     }
 
-    // Local Synthetic Telemetry Generator (Robust Fallback)
-    latestTelemetryData = generateLocalSyntheticTelemetry(range);
-    const banner = document.getElementById("simulation-banner");
-    if (banner) {
-        if (localSimulationActive) {
-            banner.style.display = "inline-block";
-            banner.textContent = `⚠️ DEMO MODE — LOCAL SIMULATION ACTIVE (${localActiveScenario.toUpperCase()})`;
-        } else {
-            banner.style.display = "inline-block";
-            banner.textContent = `⚠️ DEMO MODE — TELEMETRY API OFFLINE (LOCAL FALLBACK ACTIVE)`;
-        }
+    // Draw time-series line with accent color
+    ctx.strokeStyle = metric === "latency" ? "#f59e0b" : "#f47721";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    const stepX = width / (values.length - 1 || 1);
+    values.forEach((val, idx) => {
+        const x = idx * stepX;
+        const y = height - ((val - minVal) / (maxVal - minVal || 1)) * (height - 20) - 10;
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Update Header Stats
+    if (metric === "bandwidth") {
+        const peak = Math.max(...series.map(s => s.inbound_mbps));
+        document.getElementById("telemetry-stat-primary").textContent = `Peak Inbound: ${peak} Mbps`;
+        const avgLat = (series.reduce((acc, s) => acc + s.latency_ms, 0) / series.length).toFixed(1);
+        document.getElementById("telemetry-stat-secondary").textContent = `Avg Latency: ${avgLat} ms`;
+    } else if (metric === "packets") {
+        const peakPps = Math.max(...series.map(s => s.packets_per_sec));
+        document.getElementById("telemetry-stat-primary").textContent = `Peak Rate: ${peakPps} pps`;
+        document.getElementById("telemetry-stat-secondary").textContent = `Source: Standalone Agent`;
+    } else {
+        const peakLat = Math.max(...series.map(s => s.latency_ms));
+        document.getElementById("telemetry-stat-primary").textContent = `Peak Latency: ${peakLat} ms`;
+        document.getElementById("telemetry-stat-secondary").textContent = `Status: Stable`;
     }
-    renderTelemetryChart();
 }
 
+// Generate local synthetic telemetry (robust fallback)
 function generateLocalSyntheticTelemetry(range) {
     const points = range === "15m" ? 15 : range === "6h" ? 18 : range === "24h" ? 24 : 12;
     const series = [];
@@ -158,6 +225,51 @@ function generateLocalSyntheticTelemetry(range) {
     };
 }
 
+// Load telemetry graph with API fallback and local synthetic generator
+async function loadTelemetryGraph() {
+    const rangeElem = document.getElementById("telemetry-range");
+    const range = rangeElem ? rangeElem.value : "1h";
+    
+    try {
+        const res = await fetch(`/api/telemetry?range=${range}`);
+        if (res.ok) {
+            const data = await res.json();
+            latestTelemetryData = data;
+            const banner = document.getElementById("simulation-banner");
+            if (banner) {
+                if (data.simulation_active) {
+                    banner.style.display = "inline-block";
+                    banner.textContent = `⚠️ DEMO MODE — SIMULATED ATTACK ACTIVE (${data.active_scenario.toUpperCase()})`;
+                } else if (localSimulationActive) {
+                    banner.style.display = "inline-block";
+                    banner.textContent = `⚠️ DEMO MODE — LOCAL SIMULATION ACTIVE (${localActiveScenario.toUpperCase()})`;
+                } else {
+                    banner.style.display = "none";
+                }
+            }
+            renderTelemetryChart();
+            return;
+        }
+    } catch (err) {
+        // Fall back gracefully to local synthetic generator when API fails
+    }
+
+    // Local Synthetic Telemetry Generator (Robust Fallback)
+    latestTelemetryData = generateLocalSyntheticTelemetry(range);
+    const banner = document.getElementById("simulation-banner");
+    if (banner) {
+        if (localSimulationActive) {
+            banner.style.display = "inline-block";
+            banner.textContent = `⚠️ DEMO MODE — LOCAL SIMULATION ACTIVE (${localActiveScenario.toUpperCase()})`;
+        } else {
+            banner.style.display = "inline-block";
+            banner.textContent = `⚠️ DEMO MODE — TELEMETRY API OFFLINE (LOCAL FALLBACK ACTIVE)`;
+        }
+    }
+    renderTelemetryChart();
+}
+
+// Attack simulation - trigger demo scenario
 async function triggerAttackSimulation() {
     const scenarioElem = document.getElementById("attack-scenario");
     const scenario = scenarioElem ? scenarioElem.value : "spike";
@@ -217,6 +329,7 @@ async function triggerAttackSimulation() {
     });
 }
 
+// Reset attack simulation
 async function resetAttackSimulation() {
     localSimulationActive = false;
     localActiveScenario = null;
@@ -236,117 +349,70 @@ async function resetAttackSimulation() {
     loadTelemetryGraph();
 }
 
-function renderTelemetryChart() {
-    if (!latestTelemetryData || !latestTelemetryData.series) return;
-    const canvas = document.getElementById("telemetry-canvas");
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const metric = document.getElementById("telemetry-metric").value;
-
-    const containerWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 600;
-    canvas.width = Math.max(containerWidth - 24, 300);
-    canvas.height = 180;
-
-    const series = latestTelemetryData.series;
-    const values = series.map(s => {
-        if (metric === "bandwidth") return s.inbound_mbps;
-        if (metric === "packets") return s.packets_per_sec;
-        return s.latency_ms;
-    });
-
-    const maxVal = Math.max(...values, 10);
-    const minVal = 0;
-    const width = canvas.width;
-    const height = canvas.height;
-
-    ctx.clearRect(0, 0, width, height);
-
-    // Draw subtle grid lines
-    ctx.strokeStyle = "#1f2937";
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 4; i++) {
-        let y = (height / 4) * i;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-    }
-
-    // Draw time-series line
-    ctx.strokeStyle = metric === "latency" ? "#f59e0b" : "#f47721";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-
-    const stepX = width / (values.length - 1 || 1);
-    values.forEach((val, idx) => {
-        const x = idx * stepX;
-        const y = height - ((val - minVal) / (maxVal - minVal || 1)) * (height - 20) - 10;
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    // Update Header Stats
-    if (metric === "bandwidth") {
-        const peak = Math.max(...series.map(s => s.inbound_mbps));
-        document.getElementById("telemetry-stat-primary").textContent = `Peak Inbound: ${peak} Mbps`;
-        const avgLat = (series.reduce((acc, s) => acc + s.latency_ms, 0) / series.length).toFixed(1);
-        document.getElementById("telemetry-stat-secondary").textContent = `Avg Latency: ${avgLat} ms`;
-    } else if (metric === "packets") {
-        const peakPps = Math.max(...series.map(s => s.packets_per_sec));
-        document.getElementById("telemetry-stat-primary").textContent = `Peak Rate: ${peakPps} pps`;
-        document.getElementById("telemetry-stat-secondary").textContent = `Source: Standalone Agent`;
-    } else {
-        const peakLat = Math.max(...series.map(s => s.latency_ms));
-        document.getElementById("telemetry-stat-primary").textContent = `Peak Latency: ${peakLat} ms`;
-        document.getElementById("telemetry-stat-secondary").textContent = `Status: Stable`;
-    }
-}
-
-function toggleTelemetryLive() {
-    telemetryPaused = !telemetryPaused;
-    const btn = document.getElementById("telemetry-toggle-btn");
-    if (telemetryPaused) {
-        btn.innerHTML = `<i class="fa-solid fa-play"></i> Resume`;
-        clearInterval(telemetryLiveInterval);
-    } else {
-        btn.innerHTML = `<i class="fa-solid fa-pause"></i> Pause`;
-        telemetryLiveInterval = setInterval(loadTelemetryGraph, 5000);
-    }
-}
-
+// Initialize telemetry chart and live updates
 function initTelemetryChart() {
     loadTelemetryGraph();
     telemetryLiveInterval = setInterval(loadTelemetryGraph, 5000);
     window.addEventListener("resize", renderTelemetryChart);
 }
 
-async function loadInvestigations() {
-    try {
-        const res = await fetch("/api/investigations");
-        const investigations = await res.json();
-        const tbody = document.querySelector("#investigations-table tbody");
-        if (!tbody) return;
+// --- Network Log Analysis ---
+async function loadNetworkResults(data) {
+    const container = document.getElementById("network-results-container");
+    container.classList.remove("hidden");
 
-        if (investigations.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #94a3b8;">No investigation cases found.</td></tr>`;
-            return;
-        }
+    const summary = data.summary;
+    const pills = document.getElementById("network-summary-stats");
+    pills.innerHTML = `
+        <span class="badge badge-info">Total Events: ${summary.total}</span>
+        <span class="badge badge-danger">High Severity: ${summary.by_severity.high}</span>
+        <span class="badge badge-warning">Medium Severity: ${summary.by_severity.medium}</span>
+        <span class="badge badge-success">Low Severity: ${summary.by_severity.low}</span>
+    `;
 
-        tbody.innerHTML = investigations.map(inv => `
-            <tr>
-                <td><code>${inv.id}</code></td>
-                <td><strong>${inv.title}</strong></td>
-                <td>${inv.case_ref || "N/A"}</td>
-                <td><span class="badge badge-success">${inv.status}</span></td>
-                <td>${inv.created_at}</td>
-            </tr>
-        `).join("");
-    } catch (err) {
-        console.error("Failed to load investigations", err);
-    }
+    const tbody = document.querySelector("#network-events-table tbody");
+    tbody.innerHTML = data.events.map(e => `
+        <tr>
+            <td>${e.timestamp}</td>
+            <td><span class="badge badge-${e.severity}">${e.severity}</span></td>
+            <td><code>${e.rule_id}</code></td>
+            <td><code>${e.src_ip}</code></td>
+            <td><code>${e.dst_ip}</code></td>
+            <td>${e.observed_label}</td>
+            <td>${e.recommended_action}</td>
+        </tr>
+    `).join("");
 }
 
+// Investigation management
+function loadInvestigations() {
+    return fetch("/api/investigations")
+        .then(res => res.json())
+        .then(investigations => {
+            const tbody = document.querySelector("#investigations-table tbody");
+            if (!tbody) return;
+
+            if (investigations.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No investigation cases found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = investigations.map(inv => `
+                <tr>
+                    <td><code>${inv.id}</code></td>
+                    <td><strong>${inv.title}</strong></td>
+                    <td>${inv.case_ref || "N/A"}</td>
+                    <td><span class="badge badge-success">${inv.status}</span></td>
+                    <td>${inv.created_at}</td>
+                </tr>
+            `).join("");
+        })
+        .catch(err => {
+            console.error("Failed to load investigations", err);
+        });
+}
+
+// Form initialization
 function initForms() {
     // Network Analysis Form
     const netForm = document.getElementById("network-upload-form");
@@ -366,10 +432,10 @@ function initForms() {
                 if (res.ok) {
                     renderNetworkResults(data);
                 } else {
-                    alert(data.detail || "Analysis failed");
+                    showNotification(data.detail || "Analysis failed", "error");
                 }
             } catch (err) {
-                alert("Network analysis request failed.");
+                showNetworkError();
             }
         });
     }
@@ -515,6 +581,7 @@ function initForms() {
                     loadInvestigations();
                     loadOverviewData();
                     newInvForm.reset();
+                    showNotification("Investigation case created successfully", "success");
                 } else {
                     alert("Failed to create investigation.");
                 }
@@ -525,33 +592,59 @@ function initForms() {
     }
 }
 
-function renderNetworkResults(data) {
-    const container = document.getElementById("network-results-container");
-    container.classList.remove("hidden");
+// Notification system
+function showNotification(message, type = "info") {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.style.position = 'fixed';
+    notification.style.top = '24px';
+    notification.style.right = '24px';
+    notification.style.padding = '12px 20px';
+    notification.style.borderRadius = '8px';
+    notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    notification.style.zIndex = '1001';
+    notification.style.backgroundColor = type === 'success' ? '#10b981' : '#ef4444';
+    notification.style.color = '#ffffff';
+    notification.style.fontFamily = 'Inter, sans-serif';
+    notification.style.fontSize = '0.875rem';
+    notification.style.fontWeight = '500';
+    notification.textContent = message;
+    document.body.appendChild(notification);
 
-    const summary = data.summary;
-    const pills = document.getElementById("network-summary-stats");
-    pills.innerHTML = `
-        <span class="badge badge-info">Total Events: ${summary.total}</span>
-        <span class="badge badge-danger">High Severity: ${summary.by_severity.high}</span>
-        <span class="badge badge-warning">Medium Severity: ${summary.by_severity.medium}</span>
-        <span class="badge badge-success">Low Severity: ${summary.by_severity.low}</span>
-    `;
-
-    const tbody = document.querySelector("#network-events-table tbody");
-    tbody.innerHTML = data.events.map(e => `
-        <tr>
-            <td>${e.timestamp}</td>
-            <td><span class="badge badge-${e.severity}">${e.severity}</span></td>
-            <td><code>${e.rule_id}</code></td>
-            <td><code>${e.src_ip}</code></td>
-            <td><code>${e.dst_ip}</code></td>
-            <td>${e.observed_label}</td>
-            <td>${e.recommended_action}</td>
-        </tr>
-    `).join("");
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
 }
 
+function showNetworkError() {
+    const notification = document.createElement('div');
+    notification.className = 'notification notification-error';
+    notification.style.cssText = `
+        position: fixed;
+        top: 24px;
+        right: 24px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1001;
+        background-color: #ef4444;
+        color: #ffffff;
+        font-family: Inter, sans-serif;
+        font-size: 0.875rem;
+        font-weight: 500;
+    `;
+    notification.textContent = 'Network analysis request failed';
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Modal management
 function openNewInvestigationModal() {
     document.getElementById("investigation-modal").classList.remove("hidden");
 }
@@ -560,6 +653,7 @@ function closeModal() {
     document.getElementById("investigation-modal").classList.add("hidden");
 }
 
+// Report generation
 async function generateReport() {
     try {
         const res = await fetch("/api/reports/export");
