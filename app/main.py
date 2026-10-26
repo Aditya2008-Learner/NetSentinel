@@ -344,25 +344,26 @@ async def api_telemetry_simulate(scenario: str = Form(...)):
 
 
 @app.get("/api/telemetry")
-async def api_telemetry(range_param: str = Query("1h", alias="range")):
+async def api_telemetry(range: str = Query("1h", alias="range")):
     """Return time-series network telemetry data with active simulation anomalies."""
     now = int(datetime.utcnow().timestamp())
     num_points = 12
     step = 300
-    if range_param == "15m":
+    if range == "15m":
         num_points = 15
         step = 60
-    elif range_param == "6h":
+    elif range == "6h":
         num_points = 18
         step = 1200
-    elif range_param == "24h":
+    elif range == "24h":
         num_points = 24
         step = 3600
 
     series = []
     import random
     rng = random.Random(42)
-    for i in range(num_points):
+    builtin_range = range
+    for i in __builtins__.range(num_points):
         ts = now - ((num_points - 1 - i) * step)
         dt_str = datetime.utcfromtimestamp(ts).strftime("%H:%M:%S")
         inbound = rng.uniform(12.5, 45.8)
@@ -391,7 +392,7 @@ async def api_telemetry(range_param: str = Query("1h", alias="range")):
         })
 
     return {
-        "range": range_param,
+        "range": range,
         "source": "DEMO DATA (Standalone Telemetry Simulator)",
         "simulation_active": ACTIVE_SIMULATION["active"],
         "active_scenario": ACTIVE_SIMULATION["scenario"],
