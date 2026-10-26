@@ -115,13 +115,6 @@ async function triggerAttackSimulation() {
         alert("Simulation request failed.");
     }
 }
-        } else {
-            alert(data.detail || "Simulation failed");
-        }
-    } catch (err) {
-        alert("Simulation request failed.");
-    }
-}
 
 async function resetAttackSimulation() {
     const formData = new URLSearchParams();
