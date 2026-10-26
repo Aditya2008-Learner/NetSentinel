@@ -37,3 +37,13 @@ def test_dashboard_upload(tmp_path):
         response = client.post("/upload-dash", files=files)
     assert response.status_code == 200
     assert "Net Sentinel" in response.text
+
+
+def test_api_telemetry():
+    response = client.get("/api/telemetry?range=15m")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["range"] == "15m"
+    assert "series" in data
+    assert isinstance(data["series"], list)
+    assert len(data["series"]) > 0
