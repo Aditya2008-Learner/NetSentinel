@@ -101,8 +101,13 @@ async function triggerAttackSimulation() {
         const data = await res.json();
         if (res.ok) {
             loadTelemetryGraph();
-            if (data.sim_events && data.sim_events.length > 0) {
-                renderNetworkResults({ events: data.sim_events, summary: { total: 1, by_severity: { high: 1, medium: 0, low: 0 } } });
+            if (data.simulated_events && data.simulated_events.length > 0) {
+                // Switch view to network view to show the simulated alerts
+                switchView('network-view');
+                renderNetworkResults({ 
+                    events: data.simulated_events, 
+                    summary: { total: data.simulated_events.length, by_severity: { high: 1, medium: 0, low: 0 } } 
+                });
             }
         } else {
             alert(data.detail || "Simulation failed");
