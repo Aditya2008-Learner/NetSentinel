@@ -1,10 +1,14 @@
 // Net Sentinel Frontend Controller
+let telemetryLiveInterval = null;
+let telemetryPaused = false;
+let latestTelemetryData = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     loadOverviewData();
     loadInvestigations();
     initForms();
+    initTelemetryChart();
 });
 
 function initNavigation() {
@@ -28,9 +32,11 @@ function switchView(targetId) {
     if (activeNav) activeNav.classList.add("active");
     if (activePanel) {
         activePanel.classList.add("active");
-        // Update page title
         const titleText = activeNav ? activeNav.textContent.trim() : "Dashboard";
         document.getElementById("current-page-title").textContent = titleText;
+        if (targetId === "overview-view") {
+            setTimeout(renderTelemetryChart, 50);
+        }
     }
 }
 
@@ -47,14 +53,113 @@ async function loadOverviewData() {
         const recentList = document.getElementById("recent-investigations-list");
         if (data.recent_investigations && data.recent_investigations.length > 0) {
             recentList.innerHTML = data.recent_investigations.map(inv => `
-                <div style="padding: 10px 0; border-bottom: 1px solid #1e293b;">
-                    <strong>${inv.id}</strong>: ${inv.title} <span class="badge badge-info">${inv.status}</span>
+                <div style="padding: 10px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                    <div><strong>${inv.id}</strong>: ${inv.title}</div>
+                    <span class="badge badge-info">${inv.status}</span>
                 </div>
             `).join("");
         }
     } catch (err) {
         console.error("Failed to load overview metrics", err);
     }
+}
+
+// --- Telemetry Chart & Live Feed ---
+async function loadTelemetryGraph() {
+    const range = document.getElementById("telemetry-range").value;
+    try {
+        const res = await fetch(`/api/telemetry?range=${range}`);
+        const data = await res.json();
+        latestTelemetryData = data;
+        renderTelemetryChart();
+    } catch (err) {
+        console.error("Failed to load telemetry feed", err);
+    }
+}
+
+function renderTelemetryChart() {
+    if (!latestTelemetryData || !latestTelemetryData.series) return;
+    const canvas = document.getElementById("telemetry-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const metric = document.getElementById("telemetry-metric").value;
+
+    // Set canvas dimensions explicitly for sharpness
+    canvas.width = canvas.parentElement.clientWidth - 24;
+    canvas.height = 180;
+
+    const series = latestTelemetryData.series;
+    const values = series.map(s => {
+        if (metric === "bandwidth") return s.inbound_mbps;
+        if (metric === "packets") return s.packets_per_sec;
+        return s.latency_ms;
+    });
+
+    const maxVal = Math.max(...values, 10);
+    const minVal = 0;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw subtle grid lines
+    ctx.strokeStyle = "#1f2937";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+        let y = (height / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+
+    // Draw time-series line
+    ctx.strokeStyle = metric === "latency" ? "#f59e0b" : "#f47721";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    const stepX = width / (values.length - 1 || 1);
+    values.forEach((val, idx) => {
+        const x = idx * stepX;
+        const y = height - ((val - minVal) / (maxVal - minVal || 1)) * (height - 20) - 10;
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Update Header Stats
+    if (metric === "bandwidth") {
+        const peak = Math.max(...series.map(s => s.inbound_mbps));
+        document.getElementById("telemetry-stat-primary").textContent = `Peak Inbound: ${peak} Mbps`;
+        const avgLat = (series.reduce((acc, s) => acc + s.latency_ms, 0) / series.length).toFixed(1);
+        document.getElementById("telemetry-stat-secondary").textContent = `Avg Latency: ${avgLat} ms`;
+    } else if (metric === "packets") {
+        const peakPps = Math.max(...series.map(s => s.packets_per_sec));
+        document.getElementById("telemetry-stat-primary").textContent = `Peak Rate: ${peakPps} pps`;
+        document.getElementById("telemetry-stat-secondary").textContent = `Source: Standalone Agent`;
+    } else {
+        const peakLat = Math.max(...series.map(s => s.latency_ms));
+        document.getElementById("telemetry-stat-primary").textContent = `Peak Latency: ${peakLat} ms`;
+        document.getElementById("telemetry-stat-secondary").textContent = `Status: Stable`;
+    }
+}
+
+function toggleTelemetryLive() {
+    telemetryPaused = !telemetryPaused;
+    const btn = document.getElementById("telemetry-toggle-btn");
+    if (telemetryPaused) {
+        btn.innerHTML = `<i class="fa-solid fa-play"></i> Resume`;
+        clearInterval(telemetryLiveInterval);
+    } else {
+        btn.innerHTML = `<i class="fa-solid fa-pause"></i> Pause`;
+        telemetryLiveInterval = setInterval(loadTelemetryGraph, 5000);
+    }
+}
+
+function initTelemetryChart() {
+    loadTelemetryGraph();
+    telemetryLiveInterval = setInterval(loadTelemetryGraph, 5000);
+    window.addEventListener("resize", renderTelemetryChart);
 }
 
 async function loadInvestigations() {

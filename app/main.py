@@ -272,20 +272,43 @@ async def api_integrity_verify(
 
 
 # --- Reports Export API ---
-@app.get("/api/reports/export")
-async def api_export_report():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM investigations")
-    investigations = [dict(row) for row in cursor.fetchall()]
-    cursor.execute("SELECT * FROM devices")
-    devices = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+@app.get("/api/telemetry")
+async def api_telemetry(range: str = "1h"):
+    """Return time-series network telemetry data (bandwidth, packets, latency)."""
+    # Deterministic telemetry points based on current time
+    now = int(datetime.utcnow().timestamp())
+    points = 12
+    step = 300 # 5 min
+    if range == "15m":
+        points = 15
+        step = 60
+    elif range == "6h":
+        points = 18
+        step = 1200
+    elif range == "24h":
+        points = 24
+        step = 3600
 
+    series = []
+    import random
+    # Seed for deterministic yet realistic fluctuations
+    random.seed(42)
+    for i in range(points):
+        ts = now - ((points - 1 - i) * step)
+        dt_str = datetime.utcfromtimestamp(ts).strftime("%H:%M:%S")
+        inbound = round(random.uniform(12.5, 45.8), 2)
+        outbound = round(random.uniform(5.2, 28.4), 2)
+        pps = int(random.uniform(320, 1450))
+        latency = round(random.uniform(11.2, 38.6), 1)
+        series.append({
+            "timestamp": dt_str,
+            "inbound_mbps": inbound,
+            "outbound_mbps": outbound,
+            "packets_per_sec": pps,
+            "latency_ms": latency
+        })
     return {
-        "report_title": "Net Sentinel Security & Forensics Investigation Report",
-        "generated_at": datetime.utcnow().isoformat(),
-        "investigations": investigations,
-        "devices": devices,
-        "caveats": "Generated automatically in Demo / Investigation mode. Findings are based on observed metadata and heuristic indicators."
+        "range": range,
+        "source": "DEMO DATA (Standalone Telemetry Simulator)",
+        "series": series
     }
