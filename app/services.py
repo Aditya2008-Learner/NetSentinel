@@ -150,16 +150,22 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
             }
         )
 
-    for row in reader:
+    if not reader.fieldnames or not all(h in reader.fieldnames for h in ["timestamp", "src_ip", "dst_ip"]):
+        raise ValueError("Invalid CSV headers. Required columns: timestamp, src_ip, dst_ip")
+
+    for row_idx, row in enumerate(reader, start=1):
+        ts_raw = row.get("timestamp", "")
+        if not ts_raw:
+            raise ValueError(f"Row {row_idx}: Missing timestamp value")
         try:
-            ts = _parse_timestamp(row.get("timestamp", "") or "")
-        except Exception:
-            continue
+            ts = _parse_timestamp(ts_raw)
+        except Exception as exc:
+            raise ValueError(f"Row {row_idx}: Invalid timestamp format '{ts_raw}' ({exc})")
 
         src = (row.get("src_ip") or "").strip()
         dst = (row.get("dst_ip") or "").strip()
         if not src or not dst:
-            continue
+            raise ValueError(f"Row {row_idx}: Missing src_ip or dst_ip")
 
         minute = ts.replace(second=0, microsecond=0)
         dst_port = _parse_port(row.get("dst_port") or "")

@@ -89,6 +89,8 @@ async def upload_log(file: UploadFile = File(...)):
         content = await file.read()
         text = content.decode("utf-8")
         return analyze_logs(text)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -146,6 +148,8 @@ async def api_analyze_network_logs(file: UploadFile = File(...)):
         events = analyze_logs(text)
         summary = summarize(events)
         return {"events": events, "summary": summary}
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
