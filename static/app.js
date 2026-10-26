@@ -66,9 +66,14 @@ async function loadOverviewData() {
 
 // --- Telemetry Chart & Live Feed ---
 async function loadTelemetryGraph() {
-    const range = document.getElementById("telemetry-range").value;
+    const rangeElem = document.getElementById("telemetry-range");
+    const range = rangeElem ? rangeElem.value : "1h";
     try {
         const res = await fetch(`/api/telemetry?range=${range}`);
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Telemetry API failed (${res.status}): ${errText.slice(0, 150)}`);
+        }
         const data = await res.json();
         latestTelemetryData = data;
         
@@ -84,7 +89,7 @@ async function loadTelemetryGraph() {
 
         renderTelemetryChart();
     } catch (err) {
-        console.error("Failed to load telemetry feed", err);
+        console.error("Failed to load telemetry feed:", err.message);
     }
 }
 
