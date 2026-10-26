@@ -291,6 +291,27 @@ async def api_integrity_verify(
 
 
 # --- Reports Export API ---
+@app.get("/api/reports/export")
+async def api_export_report():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM investigations")
+        investigations = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM devices")
+        devices = [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    return {
+        "report_title": "Net Sentinel Security & Forensics Investigation Report",
+        "generated_at": datetime.utcnow().isoformat(),
+        "investigations": investigations,
+        "devices": devices,
+        "caveats": "Generated automatically in Demo / Investigation mode. Findings are based on observed metadata and heuristic indicators."
+    }
+
+
 # In-memory active simulation state
 ACTIVE_SIMULATION = {
     "scenario": None, # "spike", "portscan", "bruteforce"
