@@ -64,64 +64,163 @@ async function loadOverviewData() {
     }
 }
 
-// --- Telemetry Chart & Live Feed ---
+// --- Telemetry Chart & Live Feed (Local Fallback Simulator Enabled) ---
+let localSimulationActive = false;
+let localActiveScenario = null;
+
 async function loadTelemetryGraph() {
     const rangeElem = document.getElementById("telemetry-range");
     const range = rangeElem ? rangeElem.value : "1h";
+    
     try {
         const res = await fetch(`/api/telemetry?range=${range}`);
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Telemetry API failed (${res.status}): ${errText.slice(0, 150)}`);
+        if (res.ok) {
+            const data = await res.json();
+            latestTelemetryData = data;
+            const banner = document.getElementById("simulation-banner");
+            if (banner) {
+                if (data.simulation_active) {
+                    banner.style.display = "inline-block";
+                    banner.textContent = `⚠️ DEMO MODE — SIMULATED ATTACK ACTIVE (${data.active_scenario.toUpperCase()})`;
+                } else if (localSimulationActive) {
+                    banner.style.display = "inline-block";
+                    banner.textContent = `⚠️ DEMO MODE — LOCAL SIMULATION ACTIVE (${localActiveScenario.toUpperCase()})`;
+                } else {
+                    banner.style.display = "none";
+                }
+            }
+            renderTelemetryChart();
+            return;
         }
-        const data = await res.json();
-        latestTelemetryData = data;
+    } catch (err) {
+        // Fall back gracefully to local synthetic generator when API fails
+    }
+
+    // Local Synthetic Telemetry Generator (Robust Fallback)
+    latestTelemetryData = generateLocalSyntheticTelemetry(range);
+    const banner = document.getElementById("simulation-banner");
+    if (banner) {
+        if (localSimulationActive) {
+            banner.style.display = "inline-block";
+            banner.textContent = `⚠️ DEMO MODE — LOCAL SIMULATION ACTIVE (${localActiveScenario.toUpperCase()})`;
+        } else {
+            banner.style.display = "inline-block";
+            banner.textContent = `⚠️ DEMO MODE — TELEMETRY API OFFLINE (LOCAL FALLBACK ACTIVE)`;
+        }
+    }
+    renderTelemetryChart();
+}
+
+function generateLocalSyntheticTelemetry(range) {
+    const points = range === "15m" ? 15 : range === "6h" ? 18 : range === "24h" ? 24 : 12;
+    const series = [];
+    const now = Math.floor(Date.now() / 1000);
+    const step = range === "15m" ? 60 : range === "6h" ? 1200 : range === "24h" ? 3600 : 300;
+
+    for (let i = 0; i < points; i++) {
+        const ts = now - ((points - 1 - i) * step);
+        const dt = new Date(ts * 1000);
+        const dtStr = dt.toTimeString().split(" ")[0];
         
-        const banner = document.getElementById("simulation-banner");
-        if (banner) {
-            if (data.simulation_active) {
-                banner.style.display = "inline-block";
-                banner.textContent = `⚠️ DEMO MODE — SIMULATED ATTACK ACTIVE (${data.active_scenario.toUpperCase()})`;
-            } else {
-                banner.style.display = "none";
+        let inbound = 25.0 + (Math.sin(i * 0.5) * 10.0);
+        let outbound = 12.0 + (Math.cos(i * 0.5) * 5.0);
+        let pps = 600 + Math.floor(Math.sin(i * 0.4) * 200);
+        let latency = 18.0 + (Math.cos(i * 0.3) * 5.0);
+
+        if (localSimulationActive && i >= points - 4) {
+            if (localActiveScenario === "spike") {
+                inbound *= 4.5;
+                pps *= 3.2;
+            } else if (localActiveScenario === "portscan") {
+                pps *= 5.0;
+                latency *= 2.8;
+            } else if (localActiveScenario === "bruteforce") {
+                latency *= 4.0;
+                outbound *= 2.5;
             }
         }
 
-        renderTelemetryChart();
-    } catch (err) {
-        console.error("Failed to load telemetry feed:", err.message);
+        series.push({
+            timestamp: dtStr,
+            inbound_mbps: Number(inbound.toFixed(2)),
+            outbound_mbps: Number(outbound.toFixed(2)),
+            packets_per_sec: Math.floor(pps),
+            latency_ms: Number(latency.toFixed(1))
+        });
     }
+
+    return {
+        range: range,
+        source: "DEMO DATA (Local Frontend Telemetry Fallback)",
+        simulation_active: localSimulationActive,
+        active_scenario: localActiveScenario,
+        series: series
+    };
 }
 
 async function triggerAttackSimulation() {
-    const scenario = document.getElementById("attack-scenario").value;
+    const scenarioElem = document.getElementById("attack-scenario");
+    const scenario = scenarioElem ? scenarioElem.value : "spike";
+    
+    localSimulationActive = true;
+    localActiveScenario = scenario;
+
     const formData = new URLSearchParams();
     formData.append("scenario", scenario);
 
+    let simulatedEvents = [];
+    if (scenario === "spike") {
+        simulatedEvents = [{
+            timestamp: new Date().toTimeString().split(" ")[0],
+            severity: "warning",
+            rule_id: "NET-RULE-SPIKE",
+            src_ip: "192.0.2.50",
+            dst_ip: "192.168.1.1",
+            observed_label: "High Bandwidth Data Burst (850 Mbps)",
+            recommended_action: "Inspect egress routes for data exfiltration."
+        }];
+    } else if (scenario === "portscan") {
+        simulatedEvents = [{
+            timestamp: new Date().toTimeString().split(" ")[0],
+            severity: "danger",
+            rule_id: "NET-RULE-PORT-SCAN",
+            src_ip: "192.0.2.10",
+            dst_ip: "192.168.1.50",
+            observed_label: "Rapid SYN Scan across 512 ports",
+            recommended_action: "Block source IP 192.0.2.10 at firewall perimeter."
+        }];
+    } else if (scenario === "bruteforce") {
+        simulatedEvents = [{
+            timestamp: new Date().toTimeString().split(" ")[0],
+            severity: "danger",
+            rule_id: "NET-RULE-BRUTEFORCE",
+            src_ip: "192.0.2.88",
+            dst_ip: "192.168.1.10",
+            observed_label: "42 failed SSH authentication attempts in 30s",
+            recommended_action: "Enforce SSH key-only authentication and rate limiting."
+        }];
+    }
+
     try {
-        const res = await fetch("/api/telemetry/simulate", {
+        await fetch("/api/telemetry/simulate", {
             method: "POST",
             body: formData
         });
-        const data = await res.json();
-        if (res.ok) {
-            loadTelemetryGraph();
-            if (data.simulated_events && data.simulated_events.length > 0) {
-                // Render into network security table silently without forcing tab switch
-                renderNetworkResults({ 
-                    events: data.simulated_events, 
-                    summary: { total: data.simulated_events.length, by_severity: { high: 1, medium: 0, low: 0 } } 
-                });
-            }
-        } else {
-            alert(data.detail || "Simulation failed");
-        }
     } catch (err) {
-        alert("Simulation request failed.");
+        // Backend simulate endpoint optional when offline; local fallback handles visuals
     }
+
+    loadTelemetryGraph();
+    renderNetworkResults({ 
+        events: simulatedEvents, 
+        summary: { total: simulatedEvents.length, by_severity: { high: 1, medium: 0, low: 0 } } 
+    });
 }
 
 async function resetAttackSimulation() {
+    localSimulationActive = false;
+    localActiveScenario = null;
+
     const formData = new URLSearchParams();
     formData.append("scenario", "reset");
 
@@ -130,10 +229,11 @@ async function resetAttackSimulation() {
             method: "POST",
             body: formData
         });
-        loadTelemetryGraph();
     } catch (err) {
-        alert("Reset failed.");
+        // Fallback handles local reset
     }
+
+    loadTelemetryGraph();
 }
 
 function renderTelemetryChart() {
