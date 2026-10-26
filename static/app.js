@@ -102,13 +102,19 @@ async function triggerAttackSimulation() {
         if (res.ok) {
             loadTelemetryGraph();
             if (data.simulated_events && data.simulated_events.length > 0) {
-                // Switch view to network view to show the simulated alerts
-                switchView('network-view');
+                // Render into network security table silently without forcing tab switch
                 renderNetworkResults({ 
                     events: data.simulated_events, 
                     summary: { total: data.simulated_events.length, by_severity: { high: 1, medium: 0, low: 0 } } 
                 });
             }
+        } else {
+            alert(data.detail || "Simulation failed");
+        }
+    } catch (err) {
+        alert("Simulation request failed.");
+    }
+}
         } else {
             alert(data.detail || "Simulation failed");
         }
@@ -139,8 +145,8 @@ function renderTelemetryChart() {
     const ctx = canvas.getContext("2d");
     const metric = document.getElementById("telemetry-metric").value;
 
-    // Set canvas dimensions explicitly for sharpness
-    canvas.width = canvas.parentElement.clientWidth - 24;
+    const containerWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 600;
+    canvas.width = Math.max(containerWidth - 24, 300);
     canvas.height = 180;
 
     const series = latestTelemetryData.series;
