@@ -4,7 +4,13 @@ import sqlite3
 import pathlib
 from typing import Generator
 
-DB_PATH = pathlib.Path("data/netsentinel.db")
+import os
+
+# Use /tmp on serverless environments like Vercel where root is read-only
+if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    DB_PATH = pathlib.Path("/tmp/netsentinel.db")
+else:
+    DB_PATH = pathlib.Path("data/netsentinel.db")
 
 
 def get_db_connection() -> sqlite3.Connection:

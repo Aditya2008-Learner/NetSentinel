@@ -31,8 +31,11 @@ def on_startup():
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Ensure uploads directory exists
-UPLOAD_DIR = pathlib.Path("data/uploads")
+# Ensure uploads directory exists (use /tmp on Vercel)
+if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    UPLOAD_DIR = pathlib.Path("/tmp/uploads")
+else:
+    UPLOAD_DIR = pathlib.Path("data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
