@@ -22,11 +22,14 @@ from .stego_service import (
     analyze_image_forensics,
 )
 
-app = FastAPI(title="Net Sentinel", version="1.0.0")
+from contextlib import asynccontextmanager
 
-@app.on_event("startup")
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     init_db()
+    yield
+
+app = FastAPI(title="Net Sentinel", version="1.0.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
