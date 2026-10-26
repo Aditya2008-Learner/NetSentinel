@@ -71,9 +71,59 @@ async function loadTelemetryGraph() {
         const res = await fetch(`/api/telemetry?range=${range}`);
         const data = await res.json();
         latestTelemetryData = data;
+        
+        const banner = document.getElementById("simulation-banner");
+        if (banner) {
+            if (data.simulation_active) {
+                banner.style.display = "inline-block";
+                banner.textContent = `⚠️ DEMO MODE — SIMULATED ATTACK ACTIVE (${data.active_scenario.toUpperCase()})`;
+            } else {
+                banner.style.display = "none";
+            }
+        }
+
         renderTelemetryChart();
     } catch (err) {
         console.error("Failed to load telemetry feed", err);
+    }
+}
+
+async function triggerAttackSimulation() {
+    const scenario = document.getElementById("attack-scenario").value;
+    const formData = new URLSearchParams();
+    formData.append("scenario", scenario);
+
+    try {
+        const res = await fetch("/api/telemetry/simulate", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+            loadTelemetryGraph();
+            if (data.sim_events && data.sim_events.length > 0) {
+                renderNetworkResults({ events: data.sim_events, summary: { total: 1, by_severity: { high: 1, medium: 0, low: 0 } } });
+            }
+        } else {
+            alert(data.detail || "Simulation failed");
+        }
+    } catch (err) {
+        alert("Simulation request failed.");
+    }
+}
+
+async function resetAttackSimulation() {
+    const formData = new URLSearchParams();
+    formData.append("scenario", "reset");
+
+    try {
+        await fetch("/api/telemetry/simulate", {
+            method: "POST",
+            body: formData
+        });
+        loadTelemetryGraph();
+    } catch (err) {
+        alert("Reset failed.");
     }
 }
 

@@ -272,13 +272,74 @@ async def api_integrity_verify(
 
 
 # --- Reports Export API ---
+# In-memory active simulation state
+ACTIVE_SIMULATION = {
+    "scenario": None, # "spike", "portscan", "bruteforce"
+    "active": False,
+    "start_time": None
+}
+
+@app.post("/api/telemetry/simulate")
+async def api_telemetry_simulate(scenario: str = Form(...)):
+    """Start or stop a safe, simulated security incident scenario."""
+    if scenario not in ["spike", "portscan", "bruteforce", "reset"]:
+        raise HTTPException(status_code=400, detail="Invalid attack scenario")
+    
+    if scenario == "reset":
+        ACTIVE_SIMULATION["scenario"] = None
+        ACTIVE_SIMULATION["active"] = False
+        return {"success": True, "message": "Simulation reset to baseline."}
+
+    ACTIVE_SIMULATION["scenario"] = scenario
+    ACTIVE_SIMULATION["active"] = True
+    ACTIVE_SIMULATION["start_time"] = datetime.utcnow().isoformat()
+    
+    simulated_events = []
+    if scenario == "spike":
+        simulated_events = [{
+            "timestamp": datetime.utcnow().strftime("%H:%M:%S"),
+            "severity": "warning",
+            "rule_id": "NET-RULE-SPIKE",
+            "src_ip": "192.0.2.50",
+            "dst_ip": "192.168.1.1",
+            "observed_label": "High Bandwidth Data Burst (850 Mbps)",
+            "recommended_action": "Inspect egress routes for data exfiltration."
+        }]
+    elif scenario == "portscan":
+        simulated_events = [{
+            "timestamp": datetime.utcnow().strftime("%H:%M:%S"),
+            "severity": "danger",
+            "rule_id": "NET-RULE-PORT-SCAN",
+            "src_ip": "192.0.2.10",
+            "dst_ip": "192.168.1.50",
+            "observed_label": "Rapid SYN Scan across 512 ports",
+            "recommended_action": "Block source IP 192.0.2.10 at firewall perimeter."
+        }]
+    elif scenario == "bruteforce":
+        simulated_events = [{
+            "timestamp": datetime.utcnow().strftime("%H:%M:%S"),
+            "severity": "danger",
+            "rule_id": "NET-RULE-BRUTEFORCE",
+            "src_ip": "192.0.2.88",
+            "dst_ip": "192.168.1.10",
+            "observed_label": "42 failed SSH authentication attempts in 30s",
+            "recommended_action": "Enforce SSH key-only authentication and rate limiting."
+        }]
+
+    return {
+        "success": True,
+        "scenario": scenario,
+        "message": f"Simulation scenario '{scenario}' activated successfully.",
+        "simulated_events": simulated_events
+    }
+
+
 @app.get("/api/telemetry")
 async def api_telemetry(range: str = "1h"):
-    """Return time-series network telemetry data (bandwidth, packets, latency)."""
-    # Deterministic telemetry points based on current time
+    """Return time-series network telemetry data with active simulation anomalies."""
     now = int(datetime.utcnow().timestamp())
     points = 12
-    step = 300 # 5 min
+    step = 300
     if range == "15m":
         points = 15
         step = 60
@@ -291,24 +352,39 @@ async def api_telemetry(range: str = "1h"):
 
     series = []
     import random
-    # Seed for deterministic yet realistic fluctuations
     random.seed(42)
     for i in range(points):
         ts = now - ((points - 1 - i) * step)
         dt_str = datetime.utcfromtimestamp(ts).strftime("%H:%M:%S")
-        inbound = round(random.uniform(12.5, 45.8), 2)
-        outbound = round(random.uniform(5.2, 28.4), 2)
+        inbound = random.uniform(12.5, 45.8)
+        outbound = random.uniform(5.2, 28.4)
         pps = int(random.uniform(320, 1450))
-        latency = round(random.uniform(11.2, 38.6), 1)
+        latency = random.uniform(11.2, 38.6)
+
+        # Inject anomalies if simulation is active near the end of the series
+        if ACTIVE_SIMULATION["active"] and i >= points - 4:
+            if ACTIVE_SIMULATION["scenario"] == "spike":
+                inbound *= 4.5
+                pps *= 3.2
+            elif ACTIVE_SIMULATION["scenario"] == "portscan":
+                pps *= 5.0
+                latency *= 2.8
+            elif ACTIVE_SIMULATION["scenario"] == "bruteforce":
+                latency *= 4.0
+                outbound *= 2.5
+
         series.append({
             "timestamp": dt_str,
-            "inbound_mbps": inbound,
-            "outbound_mbps": outbound,
-            "packets_per_sec": pps,
-            "latency_ms": latency
+            "inbound_mbps": round(inbound, 2),
+            "outbound_mbps": round(outbound, 2),
+            "packets_per_sec": int(pps),
+            "latency_ms": round(latency, 1)
         })
+
     return {
         "range": range,
         "source": "DEMO DATA (Standalone Telemetry Simulator)",
+        "simulation_active": ACTIVE_SIMULATION["active"],
+        "active_scenario": ACTIVE_SIMULATION["scenario"],
         "series": series
     }
