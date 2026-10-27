@@ -249,10 +249,14 @@ async def upload_dash(request: Request, file: UploadFile = File(...)):
 @app.post("/api/network/analyze", response_model=dict)
 async def api_analyze_network_logs(file: UploadFile = File(...)):
     """Upload and analyze network connection logs CSV."""
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are accepted for network analysis")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required. Please upload a CSV file.")
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are accepted for network analysis (filename must end with .csv)")
     try:
         content = await _read_limited(file)
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="Uploaded CSV file is empty. Please upload a file containing connection logs.")
         try:
             text = content.decode("utf-8-sig")
         except UnicodeDecodeError:

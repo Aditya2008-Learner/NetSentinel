@@ -525,20 +525,38 @@ function initForms() {
         const sizeKb = (file.size / 1024).toFixed(1);
         selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)`;
 
-        // Safe client-side header preview using FileReader
-        if (file.name.toLowerCase().endsWith(".csv") || (file.type && (file.type.includes("csv") || file.type.includes("text")))) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const text = e.target && e.target.result;
-                if (typeof text === "string") {
-                    const firstLine = text.split("\n")[0].trim();
-                    if (firstLine) {
-                        selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)<br><span style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.9;">Header: ${escapeHtml(firstLine)}</span>`;
+        // Safe client-side header inspection using FileReader
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target && e.target.result;
+            if (typeof text === "string" && text.trim()) {
+                const firstLine = text.trim().split("\n")[0].trim().replace(/^\ufeff/, "");
+                if (firstLine) {
+                    // Check for delimiter
+                    const delim = (firstLine.includes(";") && !firstLine.includes(",")) ? ";" : (firstLine.includes("\t") && !firstLine.includes(",")) ? "\t" : ",";
+                    const cols = firstLine.split(delim).map(c => c.trim().toLowerCase().replace(/[-"'\s]/g, "_"));
+                    
+                    const hasTime = cols.some(c => ["timestamp", "time", "datetime", "date", "ts", "@timestamp"].includes(c));
+                    const hasSrc = cols.some(c => ["src_ip", "srcip", "source_ip", "sourceip", "source", "src", "src_addr", "source_address"].includes(c));
+                    const hasDst = cols.some(c => ["dst_ip", "dstip", "destination_ip", "destinationip", "dest_ip", "destip", "destination", "dest", "dst", "dst_addr", "destination_address"].includes(c));
+                    
+                    let statusBadge = "";
+                    if (hasTime && hasSrc && hasDst) {
+                        statusBadge = `<span style="color: var(--accent-emerald); font-weight: 600;">✅ Required telemetry columns verified</span>`;
+                    } else {
+                        const missing = [];
+                        if (!hasTime) missing.push("timestamp");
+                        if (!hasSrc) missing.push("src_ip");
+                        if (!hasDst) missing.push("dst_ip");
+                        statusBadge = `<span style="color: var(--accent-amber); font-weight: 500;">⚠️ Notice: Missing expected column(s): ${missing.join(", ")}</span>`;
                     }
+                    selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)<br>${statusBadge}<br><span style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.9;">Header: ${escapeHtml(firstLine)}</span>`;
                 }
-            };
-            reader.readAsText(file.slice(0, 1024));
-        }
+            } else if (!text || !text.trim()) {
+                selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (0 KB)<br><span style="color: var(--accent-rose);">⚠️ File is empty</span>`;
+            }
+        };
+        reader.readAsText(file.slice(0, 4096));
     }
 
     if (dropZone && logFileInput) {
@@ -582,10 +600,6 @@ function initForms() {
             const dt = e.dataTransfer;
             if (dt && dt.files && dt.files.length > 0) {
                 const dropped = dt.files[0];
-                if (!dropped.name.toLowerCase().endsWith(".csv")) {
-                    showNotification("Please select a valid CSV traffic log file.", "error");
-                    return;
-                }
                 stagedLogFile = dropped;
                 try {
                     const container = new DataTransfer();
@@ -609,8 +623,10 @@ function initForms() {
                 return;
             }
 
+            // Ensure filename ends with .csv so backend accepts it
+            const uploadName = file.name && file.name.toLowerCase().endsWith(".csv") ? file.name : `${file.name || "telemetry"}.csv`;
             const formData = new FormData();
-            formData.append("file", file);
+            formData.append("file", file, uploadName);
             
             // Get and disable the submit button
             const analyzeBtn = netForm.querySelector('button[type="submit"]');
@@ -630,6 +646,7 @@ function initForms() {
             submitCount++;
 
             try {
+                // Send FormData directly without manually setting Content-Type (let browser set multipart boundary)
                 const res = await fetch("/api/network/analyze", {
                     method: "POST",
                     body: formData
@@ -638,8 +655,7 @@ function initForms() {
                 try {
                     data = await res.json();
                 } catch (_) {
-                    // Non-JSON response
-                    showNotification("Server returned invalid data (status " + res.status + ")", "error");
+                    showNotification("Server returned non-JSON response (status " + res.status + ")", "error");
                     analyzeBtn.removeAttribute("disabled");
                     analyzeBtn.textContent = originalText;
                     submitCount--;
@@ -649,7 +665,38 @@ function initForms() {
                 if (res.ok) {
                     loadNetworkResults(data);
                 } else {
-                    showNotification(data.detail || "Analysis failed", "error");
+                    let errorMsg = "Analysis failed";
+                    if (data && data.detail) {
+                        if (typeof data.detail === "string") {
+                            errorMsg = data.detail;
+                        } else if (Array.isArray(data.detail)) {
+                            errorMsg = data.detail.map(d => d.msg || d.detail || JSON.stringify(d)).join("; ");
+                        } else if (typeof data.detail === "object") {
+                            errorMsg = JSON.stringify(data.detail);
+                        }
+                    }
+
+                    // Render clear error inside the results container as well as popup
+                    const container = document.getElementById("network-results-container");
+                    if (container) {
+                        container.classList.remove("hidden");
+                        const pills = document.getElementById("network-summary-stats");
+                        if (pills) {
+                            pills.innerHTML = `<span class="badge badge-danger"><i class="fa-solid fa-circle-exclamation"></i> Analysis Rejected (HTTP ${res.status})</span>`;
+                        }
+                        const tbody = document.querySelector("#network-events-table tbody");
+                        if (tbody) {
+                            tbody.innerHTML = `
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: var(--accent-rose); padding: 24px; font-weight: 500;">
+                                        <i class="fa-solid fa-triangle-exclamation" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i>
+                                        <strong>Error:</strong> ${escapeHtml(errorMsg)}
+                                    </td>
+                                </tr>
+                            `;
+                        }
+                    }
+                    showNotification(errorMsg, "error");
                 }
             } catch (err) {
                 showNetworkError();

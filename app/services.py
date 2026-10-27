@@ -18,7 +18,7 @@ Rule definitions and thresholds are configurable.
 
 import csv
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
 
 __all__ = ["analyze_logs", "summarize", "SRC_THRESHOLD", "DST_THRESHOLD", "RULE_DEFINITIONS"]
@@ -29,8 +29,6 @@ SCAN_PORT_THRESHOLD = 8
 BRUTE_FORCE_THRESHOLD = 6
 LARGE_TRANSFER_BYTES = 10 * 1024 * 1024
 SENSITIVE_PORTS = {22, 3389}
-
-_TIMESTAMP_FORMATS = ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S")
 
 # Structured rule definitions for explainability metadata
 RULE_DEFINITIONS = {
@@ -68,16 +66,77 @@ RULE_DEFINITIONS = {
 
 
 def _parse_timestamp(ts: str) -> datetime:
-    """Parse ISO-8601 or a common log timestamp.
+    """Parse ISO-8601, Unix epoch (seconds or ms), or common log timestamps.
 
+    All timestamps are normalized to naive UTC datetime.
     Raises ``ValueError`` if the string cannot be parsed.
     """
-    for fmt in _TIMESTAMP_FORMATS:
+    ts = (ts or "").strip().strip('"\'')
+    if not ts:
+        raise ValueError("Timestamp string is empty")
+
+    # 1. Check for numeric Unix epoch (seconds, float, or milliseconds)
+    try:
+        val = float(ts)
+        # If timestamp is in milliseconds (> 1e11 is year 1973+ in ms, year 5138+ in s)
+        if val > 1e11:
+            val = val / 1000.0
+        return datetime.fromtimestamp(val, tz=timezone.utc).replace(tzinfo=None)
+    except (ValueError, OverflowError, OSError):
+        pass
+
+    # 2. Normalize delimiters and timezones
+    clean_ts = ts.rstrip("Zz").replace("T", " ")
+    if "+" in clean_ts:
+        clean_ts = clean_ts.split("+")[0].strip()
+
+    # 3. Slash formats: YYYY/MM/DD, MM/DD/YYYY, DD/MM/YYYY
+    if "/" in clean_ts:
+        for fmt in (
+            "%Y/%m/%d %H:%M:%S",
+            "%Y/%m/%d %H:%M:%S.%f",
+            "%m/%d/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M:%S",
+            "%Y/%m/%d",
+            "%m/%d/%Y",
+            "%d/%m/%Y",
+        ):
+            try:
+                return datetime.strptime(clean_ts, fmt)
+            except ValueError:
+                continue
+
+    # 4. Standard ISO and log formats
+    formats = (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d",
+        "%H:%M:%S",
+        "%H:%M:%S.%f",
+        "%d-%m-%Y %H:%M:%S",
+        "%m-%d-%Y %H:%M:%S",
+    )
+    for fmt in formats:
         try:
-            return datetime.strptime(ts, fmt)
+            dt = datetime.strptime(clean_ts, fmt)
+            if fmt.startswith("%H:%M:%S"):
+                today = datetime.utcnow().date()
+                dt = datetime.combine(today, dt.time())
+            return dt
         except ValueError:
             continue
-    return datetime.fromisoformat(ts)
+
+    # 5. Fallback to datetime.fromisoformat
+    try:
+        iso_str = ts
+        if iso_str.endswith("Z"):
+            iso_str = iso_str[:-1] + "+00:00"
+        dt = datetime.fromisoformat(iso_str)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except Exception as exc:
+        raise ValueError(f"Invalid timestamp format '{ts}'") from exc
 
 
 def _parse_port(value: str) -> Optional[int]:
@@ -110,25 +169,90 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
         Each dict contains timestamp, src_ip, dst_ip, reason, severity,
         rule_id, observed_value_num, threshold_num, observed_label, and recommended_action.
     """
-    events: List[Dict[str, object]] = []
-    
-    # Use io.StringIO with utf-8-sig or standard newline handling
+    raw_text = (csv_text or "").strip()
+    if not raw_text:
+        raise ValueError("CSV file is empty. Please upload a file containing connection logs.")
+
+    first_line = raw_text.splitlines()[0] if raw_text.splitlines() else ""
+    delimiter = ","
+    if ";" in first_line and "," not in first_line:
+        delimiter = ";"
+    elif "\t" in first_line and "," not in first_line:
+        delimiter = "\t"
+
     import io
-    f = io.StringIO(csv_text)
-    reader = csv.DictReader(f)
-    
-    # Clean fieldnames (strip whitespace and BOM)
-    if reader.fieldnames:
-        reader.fieldnames = [fn.strip().lstrip('\ufeff').replace('\ufeff', '') for fn in reader.fieldnames]
+    reader = csv.DictReader(io.StringIO(raw_text), delimiter=delimiter)
+    if not reader.fieldnames:
+        raise ValueError("CSV file contains no valid header row.")
 
-    if not reader.fieldnames or not all(h in [fn.strip() for fn in reader.fieldnames] for h in ["timestamp", "src_ip", "dst_ip"]):
-        raise ValueError("Invalid CSV headers. Required columns: timestamp, src_ip, dst_ip")
+    # Canonical aliases map: lowercase stripped key -> standard field
+    alias_map = {
+        "timestamp": "timestamp",
+        "time": "timestamp",
+        "datetime": "timestamp",
+        "date": "timestamp",
+        "ts": "timestamp",
+        "@timestamp": "timestamp",
+        "src_ip": "src_ip",
+        "srcip": "src_ip",
+        "source_ip": "src_ip",
+        "sourceip": "src_ip",
+        "source": "src_ip",
+        "src": "src_ip",
+        "src_addr": "src_ip",
+        "source_address": "src_ip",
+        "dst_ip": "dst_ip",
+        "dstip": "dst_ip",
+        "destination_ip": "dst_ip",
+        "destinationip": "dst_ip",
+        "dest_ip": "dst_ip",
+        "destip": "dst_ip",
+        "destination": "dst_ip",
+        "dest": "dst_ip",
+        "dst": "dst_ip",
+        "dst_addr": "dst_ip",
+        "destination_address": "dst_ip",
+        "src_port": "src_port",
+        "source_port": "src_port",
+        "sport": "src_port",
+        "dst_port": "dst_port",
+        "destination_port": "dst_port",
+        "dest_port": "dst_port",
+        "dport": "dst_port",
+        "port": "dst_port",
+        "protocol": "protocol",
+        "proto": "protocol",
+        "bytes": "bytes",
+        "length": "bytes",
+        "size": "bytes",
+        "byte_count": "bytes",
+    }
 
-    # Read rows
+    # Map raw fieldnames to canonical names
+    header_mapping = {}
+    found_canonicals = set()
+    for raw_fn in reader.fieldnames:
+        clean_fn = raw_fn.strip().lstrip('\ufeff').replace('\ufeff', '').strip('"\'')
+        normalized_key = clean_fn.lower().replace("-", "_").replace(" ", "_")
+        canonical = alias_map.get(normalized_key)
+        if canonical:
+            header_mapping[raw_fn] = canonical
+            found_canonicals.add(canonical)
+
+    required = {"timestamp", "src_ip", "dst_ip"}
+    missing = required - found_canonicals
+    if missing:
+        raw_headers = [f.strip() for f in reader.fieldnames]
+        raise ValueError(
+            f"Invalid CSV headers: Found {raw_headers}. Missing required columns: {sorted(list(missing))}. "
+            "Required columns: timestamp, src_ip, dst_ip (or aliases such as time, source, destination)."
+        )
+
     rows = list(reader)
-    if not rows and not reader.fieldnames:
-        raise ValueError("CSV file is empty or contains no valid data rows.")
+    if not rows:
+        return []
 
+    events: List[Dict[str, object]] = []
     row_count = 0
     src_counts: Dict[Tuple[str, datetime], int] = defaultdict(int)
     dst_counts: Dict[Tuple[str, datetime], int] = defaultdict(int)
@@ -168,8 +292,14 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
         )
 
     for row_idx, row in enumerate(rows, start=1):
+        # Translate row to canonical fields
+        canon_row = {}
+        for k, v in row.items():
+            if k in header_mapping:
+                canon_row[header_mapping[k]] = v
+
         row_count += 1
-        ts_raw = (row.get("timestamp") or "").strip()
+        ts_raw = (canon_row.get("timestamp") or "").strip()
         if not ts_raw:
             raise ValueError(f"Row {row_idx}: Missing timestamp value")
         try:
@@ -177,14 +307,14 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
         except Exception as exc:
             raise ValueError(f"Row {row_idx}: Invalid timestamp format '{ts_raw}' ({exc})")
 
-        src = (row.get("src_ip") or "").strip()
-        dst = (row.get("dst_ip") or "").strip()
+        src = (canon_row.get("src_ip") or "").strip()
+        dst = (canon_row.get("dst_ip") or "").strip()
         if not src or not dst:
             raise ValueError(f"Row {row_idx}: Missing src_ip or dst_ip")
 
         minute = ts.replace(second=0, microsecond=0)
-        dst_port = _parse_port(row.get("dst_port") or "")
-        size = _parse_bytes(row.get("bytes") or "")
+        dst_port = _parse_port(canon_row.get("dst_port") or "")
+        size = _parse_bytes(canon_row.get("bytes") or "")
 
         src_key = (src, minute)
         dst_key = (dst, minute)

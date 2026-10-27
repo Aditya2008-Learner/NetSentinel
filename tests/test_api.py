@@ -271,3 +271,107 @@ def test_db_auto_initialization(tmp_path):
     assert "integrity_baselines" in tables
     conn.close()
 
+
+def test_csv_with_exact_3_columns_timestamp_src_ip_dst_ip():
+    """Verify that a CSV containing only timestamp, src_ip, dst_ip succeeds."""
+    csv_content = (
+        "timestamp,src_ip,dst_ip\n"
+        "2026-10-27T18:00:00Z,192.168.1.5,10.0.0.1\n"
+        "2026-10-27T18:00:30Z,192.168.1.5,10.0.0.2\n"
+    )
+    res = client.post(
+        "/api/network/analyze",
+        files={"file": ("telemetry.csv", csv_content.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert "events" in data
+    assert "summary" in data
+    assert data["summary"]["total_records_analyzed"] == 2
+
+
+def test_csv_with_capitalized_and_alias_headers():
+    """Verify that capitalized headers and standard aliases (Timestamp, Source_IP, Destination_IP) are accepted."""
+    csv_content = (
+        "Timestamp,Source_IP,Destination_IP\n"
+        "2026-10-27 18:00:00,192.168.1.5,10.0.0.1\n"
+    )
+    res = client.post(
+        "/api/network/analyze",
+        files={"file": ("telemetry.csv", csv_content.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 200
+    assert res.json()["summary"]["total_records_analyzed"] == 1
+
+
+def test_csv_with_semicolon_delimiter():
+    """Verify that CSV files using semicolon delimiters are automatically handled."""
+    csv_content = (
+        "timestamp;src_ip;dst_ip\n"
+        "2026-10-27 18:00:00;192.168.1.5;10.0.0.1\n"
+    )
+    res = client.post(
+        "/api/network/analyze",
+        files={"file": ("semicolon.csv", csv_content.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 200
+    assert res.json()["summary"]["total_records_analyzed"] == 1
+
+
+def test_csv_with_unix_epoch_and_iso_timestamps():
+    """Verify that Unix epoch (seconds & ms) and ISO timestamps parse properly."""
+    csv_content = (
+        "timestamp,src_ip,dst_ip\n"
+        "1730052583,192.168.1.5,10.0.0.1\n"
+        "1730052583000,192.168.1.6,10.0.0.2\n"
+        "2026/10/27 18:00:00,192.168.1.7,10.0.0.3\n"
+    )
+    res = client.post(
+        "/api/network/analyze",
+        files={"file": ("epochs.csv", csv_content.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 200
+    assert res.json()["summary"]["total_records_analyzed"] == 3
+
+
+def test_csv_empty_file_returns_400():
+    """Empty CSV files must return a descriptive HTTP 400 error."""
+    res = client.post(
+        "/api/network/analyze",
+        files={"file": ("empty.csv", b"", "text/csv")},
+    )
+    assert res.status_code == 400
+    assert "empty" in res.json()["detail"].lower()
+
+
+def test_csv_headers_only_zero_rows_returns_200():
+    """CSV containing valid headers but 0 rows returns 200 with 0 events."""
+    csv_content = "timestamp,src_ip,dst_ip\n"
+    res = client.post(
+        "/api/network/analyze",
+        files={"file": ("zero_rows.csv", csv_content.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["events"] == []
+    assert data["summary"]["total_records_analyzed"] == 0
+
+
+def test_csv_wrong_field_name_returns_422():
+    """Sending file under wrong field name returns 422 Unprocessable Entity."""
+    res = client.post(
+        "/api/network/analyze",
+        files={"wrong_field": ("test.csv", b"timestamp,src_ip,dst_ip\n", "text/csv")},
+    )
+    assert res.status_code == 422
+
+
+def test_csv_non_csv_extension_returns_400():
+    """Uploading a non-csv extension returns 400."""
+    res = client.post(
+        "/api/network/analyze",
+        files={"file": ("logs.exe", b"timestamp,src_ip,dst_ip\n", "text/plain")},
+    )
+    assert res.status_code == 400
+    assert "Only CSV files are accepted" in res.json()["detail"]
+
