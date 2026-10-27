@@ -141,7 +141,7 @@ function renderTelemetryChart() {
     ctx.clearRect(0, 0, width, height);
 
     // Draw subtle grid lines
-    ctx.strokeStyle = "#1e293b";
+    ctx.strokeStyle = "rgba(38, 53, 79, 0.6)";
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
         let y = (height / 4) * i;
@@ -151,15 +151,15 @@ function renderTelemetryChart() {
         ctx.stroke();
     }
 
-    // Draw time-series line with accent color
-    ctx.strokeStyle = metric === "latency" ? "#f59e0b" : "#f47721";
-    ctx.lineWidth = 2;
+    // Draw time-series line with refined SOC accents
+    ctx.strokeStyle = metric === "latency" ? "#f59e0b" : "#10b981";
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
 
     const stepX = width / (values.length - 1 || 1);
     values.forEach((val, idx) => {
         const x = idx * stepX;
-        const y = height - ((val - minVal) / (maxVal - minVal || 1)) * (height - 20) - 10;
+        const y = height - ((val - minVal) / (maxVal - minVal || 1)) * (height - 24) - 12;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });

@@ -6,6 +6,9 @@
     <title>Net Sentinel — Cybersecurity & Digital Forensics</title>
     <link rel="stylesheet" href="/static/styles.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app-container">
@@ -75,7 +78,7 @@
             </header>
 
             <!-- Views Container -->
-            <div class="views-wrapper">
+            <div class="views-wrapper" id="views-wrapper">
 
                 <!-- 1. OVERVIEW VIEW -->
                 <section id="overview-view" class="view-panel active">
@@ -157,59 +160,60 @@
                     </div>
 
                     <!-- Professional Network Telemetry Graph Panel -->
-                    <div class="card" style="margin-top: 24px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="card telemetry-panel">
+                        <div class="telemetry-header">
                             <div>
-                                <h2>Network Telemetry</h2>
-                                <p>Live throughput, packet rate, and latency observations (DEMO DATA).</p>
+                                <h2><i class="fa-solid fa-chart-line" style="color: var(--accent-emerald);"></i> Network Telemetry</h2>
+                                <p>Real-time throughput, packet rate, and latency observations (DEMO DATA).</p>
                             </div>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                <select id="telemetry-range" onchange="loadTelemetryGraph()" style="padding: 6px 10px; background: #1f2937; color: #fff; border: 1px solid #374151; font-size: 0.8rem;">
+                            <div class="telemetry-controls-group">
+                                <select id="telemetry-range" class="telemetry-select" onchange="loadTelemetryGraph()">
                                     <option value="15m">15 Minutes</option>
                                     <option value="1h" selected>1 Hour</option>
                                     <option value="6h">6 Hours</option>
                                     <option value="24h">24 Hours</option>
                                 </select>
-                                <select id="telemetry-metric" onchange="renderTelemetryChart()" style="padding: 6px 10px; background: #1f2937; color: #fff; border: 1px solid #374151; font-size: 0.8rem;">
+                                <select id="telemetry-metric" class="telemetry-select" onchange="renderTelemetryChart()">
                                     <option value="bandwidth" selected>Bandwidth (Mbps)</option>
                                     <option value="packets">Packets / sec</option>
                                     <option value="latency">Latency (ms)</option>
                                 </select>
-                                <button class="btn btn-secondary" onclick="toggleTelemetryLive()" id="telemetry-toggle-btn" style="padding: 6px 12px; font-size: 0.8rem;">
+                                <button class="btn btn-secondary" onclick="toggleTelemetryLive()" id="telemetry-toggle-btn">
                                     <i class="fa-solid fa-pause"></i> Pause
                                 </button>
                             </div>
                         </div>
 
                         <!-- Demo Attack Simulator Toolbar -->
-                        <div style="background: #1f2937; padding: 12px; margin-bottom: 16px; border: 1px solid #374151; display: flex; justify-content: space-between; align-items: center;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <span style="font-weight: 700; font-size: 0.85rem; color: #f59e0b;"><i class="fa-solid fa-triangle-exclamation"></i> DEMO ATTACK MODE:</span>
-                                <select id="attack-scenario" style="padding: 6px 10px; background: #111827; color: #fff; border: 1px solid #374151; font-size: 0.8rem;">
+                        <div class="attack-bar">
+                            <div class="attack-bar-title">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <span>SIMULATED ATTACK LAB:</span>
+                                <select id="attack-scenario" class="telemetry-select" style="padding: 5px 10px;">
                                     <option value="spike">1. Traffic Spike (DoS Burst)</option>
                                     <option value="portscan">2. Simulated Port Scan (SYN Flood)</option>
                                     <option value="bruteforce">3. Brute-Force Attempts (SSH)</option>
                                 </select>
                             </div>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn btn-primary" onclick="triggerAttackSimulation()" style="padding: 6px 14px; font-size: 0.8rem; background: #ef4444; border-color: #ef4444;">
+                                <button class="btn btn-danger" onclick="triggerAttackSimulation()">
                                     <i class="fa-solid fa-play"></i> Start Attack
                                 </button>
-                                <button class="btn btn-secondary" onclick="resetAttackSimulation()" style="padding: 6px 14px; font-size: 0.8rem;">
+                                <button class="btn btn-secondary" onclick="resetAttackSimulation()">
                                     <i class="fa-solid fa-rotate-right"></i> Reset Baseline
                                 </button>
                             </div>
                         </div>
 
-                        <div style="position: relative; height: 260px; width: 100%; background: #0b0f19; border: 1px solid #1f2937; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
-                            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #9ca3af; border-bottom: 1px dashed #1f2937; padding-bottom: 6px;">
+                        <div class="graph-canvas-container">
+                            <div class="graph-status-bar">
                                 <span id="telemetry-stat-primary">Peak Inbound: 45.8 Mbps</span>
-                                <span id="simulation-banner" style="color: #ef4444; font-weight: 700; display: none;"><i class="fa-solid fa-radiation"></i> DEMO MODE — SIMULATED ATTACK ACTIVE</span>
+                                <span id="simulation-banner" style="color: var(--accent-rose); font-weight: 700; display: none;"><i class="fa-solid fa-radiation"></i> DEMO MODE — SIMULATED ATTACK ACTIVE</span>
                                 <span id="telemetry-stat-secondary">Avg Latency: 24.1 ms</span>
                             </div>
                             <!-- Canvas for telemetry chart -->
                             <canvas id="telemetry-canvas" style="width: 100%; height: 180px; display: block;"></canvas>
-                            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #6b7280; border-top: 1px solid #1f2937; padding-top: 6px;" id="telemetry-time-axis">
+                            <div class="time-axis-labels" id="telemetry-time-axis">
                                 <span>-60m</span>
                                 <span>-45m</span>
                                 <span>-30m</span>
@@ -228,10 +232,17 @@
                     </div>
 
                     <div class="card">
-                        <h3>Upload Connection Logs (CSV)</h3>
+                        <h3><i class="fa-solid fa-file-csv" style="color: var(--accent-emerald);"></i> Upload Connection Logs (CSV)</h3>
+                        <p style="margin-bottom: 16px;">Select an authorized network packet capture or flow CSV export to scan for anomalous spikes, port scans, and brute-force attempts.</p>
                         <form id="network-upload-form" class="upload-box">
-                            <input type="file" id="log-file-input" accept=".csv" required />
-                            <button type="submit" class="btn btn-primary">
+                            <div class="upload-drop-zone" onclick="document.getElementById('log-file-input').click()">
+                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                                <p style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Click to select or drop CSV traffic logs</p>
+                                <p style="font-size: 0.8rem; color: var(--text-muted);">Required schema: timestamp, src_ip, dst_ip, src_port, dst_port, protocol, bytes</p>
+                                <div id="selected-file-display" style="display: none; margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; color: var(--accent-emerald);"></div>
+                            </div>
+                            <input type="file" id="log-file-input" accept=".csv" style="display: none;" required onchange="const f = this.files[0]; const d = document.getElementById('selected-file-display'); if (f) { d.style.display = 'block'; d.textContent = `Selected: ${f.name} (${(f.size/1024).toFixed(1)} KB)`; }" />
+                            <button type="submit" class="btn btn-primary" style="margin-top: 8px;">
                                 <i class="fa-solid fa-microchip"></i> Analyze Traffic Logs
                             </button>
                         </form>
