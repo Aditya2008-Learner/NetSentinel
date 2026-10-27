@@ -494,61 +494,80 @@ async def api_telemetry_simulate(scenario: str = Form(...)):
     }
 
 
-@app.get("/api/telemetry")
-async def api_telemetry(time_range: Literal["15m", "1h", "6h", "24h"] = Query("1h", alias="range")):
-    """Return time-series network telemetry data with active simulation anomalies."""
+def _build_telemetry_series(time_range: str, sim: dict) -> list:
+    """Generate a deterministic, time-seeded telemetry series.
+
+    The RNG seed is derived from the current UTC minute so values drift
+    smoothly between requests rather than jumping to a fixed sequence.
+    All timestamps are UTC ISO 8601 strings.
+    """
+    import math
     import random
 
-    sim = await asyncio.to_thread(_get_simulation)
+    _RANGE_CONFIG = {
+        "15m": (15, 60),
+        "1h":  (12, 300),
+        "6h":  (18, 1200),
+        "24h": (24, 3600),
+    }
+    num_points, step = _RANGE_CONFIG.get(time_range, (12, 300))
 
-    now = int(datetime.utcnow().timestamp())
-    num_points = 12
-    step = 300
-    if time_range == "15m":
-        num_points = 15
-        step = 60
-    elif time_range == "6h":
-        num_points = 18
-        step = 1200
-    elif time_range == "24h":
-        num_points = 24
-        step = 3600
+    now_ts = int(datetime.utcnow().timestamp())
+    # Seed changes once per minute so consecutive polls within the same minute
+    # return identical data (no flicker), but the series drifts over time.
+    seed = now_ts // 60
+    rng = random.Random(seed)
 
     series = []
-    rng = random.Random(42)
     for i in range(num_points):
-        ts = now - ((num_points - 1 - i) * step)
-        dt_str = datetime.utcfromtimestamp(ts).strftime("%H:%M:%S")
-        inbound = rng.uniform(12.5, 45.8)
-        outbound = rng.uniform(5.2, 28.4)
-        pps = int(rng.uniform(320, 1450))
-        latency = rng.uniform(11.2, 38.6)
+        ts = now_ts - ((num_points - 1 - i) * step)
+        dt_iso = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Smooth sinusoidal base with small random jitter.
+        phase = (ts / step) * 0.4
+        inbound  = 25.0 + math.sin(phase) * 10.0 + rng.uniform(-2.0, 2.0)
+        outbound = 12.0 + math.cos(phase) * 5.0  + rng.uniform(-1.0, 1.0)
+        pps      = int(700 + math.sin(phase * 0.8) * 200 + rng.uniform(-30, 30))
+        latency  = 18.0 + math.cos(phase * 0.6) * 6.0 + rng.uniform(-1.5, 1.5)
 
         if sim["active"] and i >= num_points - 4:
-            if sim["scenario"] == "spike":
+            scenario = sim["scenario"]
+            if scenario == "spike":
                 inbound *= 4.5
                 pps = int(pps * 3.2)
-            elif sim["scenario"] == "portscan":
+            elif scenario == "portscan":
                 pps = int(pps * 5.0)
                 latency *= 2.8
-            elif sim["scenario"] == "bruteforce":
+            elif scenario == "bruteforce":
                 latency *= 4.0
                 outbound *= 2.5
 
-        series.append(
-            {
-                "timestamp": dt_str,
-                "inbound_mbps": round(inbound, 2),
-                "outbound_mbps": round(outbound, 2),
-                "packets_per_sec": int(pps),
-                "latency_ms": round(latency, 1),
-            }
-        )
+        series.append({
+            "timestamp": dt_iso,
+            "inbound_mbps": round(max(0.0, inbound), 2),
+            "outbound_mbps": round(max(0.0, outbound), 2),
+            "packets_per_sec": max(0, pps),
+            "latency_ms": round(max(0.0, latency), 1),
+        })
+
+    return series
+
+
+@app.get("/api/telemetry")
+async def api_telemetry(time_range: Literal["15m", "1h", "6h", "24h"] = Query("1h", alias="range")):
+    """Return time-series network telemetry data with active simulation anomalies.
+
+    All timestamps are UTC ISO 8601. Values are always finite positive numbers.
+    The series is generated off the event loop thread.
+    """
+    sim = await asyncio.to_thread(_get_simulation)
+    series = await asyncio.to_thread(_build_telemetry_series, time_range, sim)
 
     return {
         "range": time_range,
         "source": "DEMO DATA (Standalone Telemetry Simulator)",
         "simulation_active": sim["active"],
-        "active_scenario": sim["scenario"],
+        "active_scenario": sim["scenario"] or None,
+        "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "series": series,
     }

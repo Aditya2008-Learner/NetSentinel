@@ -69,3 +69,60 @@ def test_api_reports_export():
     data = response.json()
     assert "report_title" in data
     assert "investigations" in data
+
+
+def test_telemetry_schema_and_timestamps():
+    """Timestamps must be UTC ISO 8601 and all numeric fields must be finite."""
+    import math
+    response = client.get("/api/telemetry?range=1h")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["range"] == "1h"
+    assert "generated_at" in data
+    assert data["generated_at"].endswith("Z")
+    assert isinstance(data["series"], list)
+    assert len(data["series"]) > 0
+    for point in data["series"]:
+        assert point["timestamp"].endswith("Z"), f"Non-UTC timestamp: {point['timestamp']}"
+        for field in ("inbound_mbps", "outbound_mbps", "packets_per_sec", "latency_ms"):
+            val = point[field]
+            assert isinstance(val, (int, float)), f"{field} is not numeric: {val!r}"
+            assert math.isfinite(val), f"{field} is not finite: {val}"
+            assert val >= 0, f"{field} is negative: {val}"
+
+
+def test_telemetry_series_is_time_ordered():
+    """Series timestamps must be strictly ascending."""
+    response = client.get("/api/telemetry?range=24h")
+    assert response.status_code == 200
+    series = response.json()["series"]
+    timestamps = [p["timestamp"] for p in series]
+    assert timestamps == sorted(timestamps), "Series is not time-ordered"
+
+
+def test_telemetry_invalid_range_rejected():
+    """An unrecognised range value must return 422."""
+    response = client.get("/api/telemetry?range=99h")
+    assert response.status_code == 422
+
+
+def test_telemetry_simulation_idempotent():
+    """Starting the same scenario twice must not error; reset must clear it."""
+    r1 = client.post("/api/telemetry/simulate", data={"scenario": "spike"})
+    assert r1.status_code == 200
+    r2 = client.post("/api/telemetry/simulate", data={"scenario": "spike"})
+    assert r2.status_code == 200
+
+    tel = client.get("/api/telemetry?range=15m")
+    assert tel.json()["simulation_active"] is True
+
+    reset = client.post("/api/telemetry/simulate", data={"scenario": "reset"})
+    assert reset.status_code == 200
+
+    tel2 = client.get("/api/telemetry?range=15m")
+    assert tel2.json()["simulation_active"] is False
+
+
+def test_telemetry_invalid_scenario_rejected():
+    response = client.post("/api/telemetry/simulate", data={"scenario": "ddos"})
+    assert response.status_code == 400

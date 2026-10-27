@@ -1,9 +1,18 @@
-// Net Sentinel Frontend Controller — Enhanced with Cybersecurity Theme
+// Net Sentinel Frontend Controller
 let telemetryLiveInterval = null;
 let telemetryPaused = false;
 let latestTelemetryData = null;
 let localSimulationActive = false;
 let localActiveScenario = null;
+
+// Sequence counter: incremented on every fetch so stale responses are discarded.
+let _telemetrySeq = 0;
+// True while a fetch is in flight — prevents overlapping requests.
+let _telemetryInFlight = false;
+// Consecutive failure count for bounded backoff.
+let _telemetryFailCount = 0;
+const _TELEMETRY_BASE_MS = 5000;
+const _TELEMETRY_MAX_BACKOFF_MS = 30000;
 
 document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
@@ -11,6 +20,16 @@ document.addEventListener("DOMContentLoaded", () => {
     loadInvestigations();
     initForms();
     initTelemetryChart();
+});
+
+// Pause polling when the tab is hidden; resume when visible again.
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+        _stopTelemetryInterval();
+    } else if (!telemetryPaused) {
+        _startTelemetryInterval();
+        loadTelemetryGraph();
+    }
 });
 
 // Initialize navigation with smooth transitions
@@ -211,111 +230,156 @@ function generateLocalSyntheticTelemetry(range) {
     };
 }
 
-// Load telemetry graph with API fallback and local synthetic generator
-async function loadTelemetryGraph() {
-    const rangeElem = document.getElementById("telemetry-range");
-    const range = rangeElem ? rangeElem.value : "1h";
-    
-    try {
-        const res = await fetch(`/api/telemetry?range=${range}`);
-        if (res.ok) {
-            const data = await res.json();
-            latestTelemetryData = data;
-            const banner = document.getElementById("simulation-banner");
-            if (banner) {
-                if (data.simulation_active) {
-                    banner.style.display = "inline-block";
-                    banner.textContent = `⚠️ DEMO MODE — SIMULATED ATTACK ACTIVE (${data.active_scenario.toUpperCase()})`;
-                } else if (localSimulationActive) {
-                    banner.style.display = "inline-block";
-                    banner.textContent = `⚠️ DEMO MODE — LOCAL SIMULATION ACTIVE (${localActiveScenario.toUpperCase()})`;
-                } else {
-                    banner.style.display = "none";
-                }
-            }
-            renderTelemetryChart();
-            return;
-        }
-    } catch (err) {
-        // Fall back gracefully to local synthetic generator when API fails
-    }
+// --- Telemetry polling helpers ---
 
-    // Local Synthetic Telemetry Generator (Robust Fallback)
-    latestTelemetryData = generateLocalSyntheticTelemetry(range);
-    const banner = document.getElementById("simulation-banner");
-    if (banner) {
-        if (localSimulationActive) {
-            banner.style.display = "inline-block";
-            banner.textContent = `⚠️ DEMO MODE — LOCAL SIMULATION ACTIVE (${localActiveScenario.toUpperCase()})`;
-        } else {
-            banner.style.display = "inline-block";
-            banner.textContent = `⚠️ DEMO MODE — TELEMETRY API OFFLINE (LOCAL FALLBACK ACTIVE)`;
-        }
+function _stopTelemetryInterval() {
+    if (telemetryLiveInterval !== null) {
+        clearInterval(telemetryLiveInterval);
+        telemetryLiveInterval = null;
     }
-    renderTelemetryChart();
 }
 
-// Attack simulation - trigger demo scenario
+function _startTelemetryInterval() {
+    _stopTelemetryInterval();
+    const delay = _telemetryFailCount === 0
+        ? _TELEMETRY_BASE_MS
+        : Math.min(_TELEMETRY_BASE_MS * Math.pow(2, _telemetryFailCount), _TELEMETRY_MAX_BACKOFF_MS);
+    telemetryLiveInterval = setInterval(loadTelemetryGraph, delay);
+}
+
+function _updateBanner(data) {
+    const banner = document.getElementById("simulation-banner");
+    if (!banner) return;
+    if (data && data.simulation_active && data.active_scenario) {
+        banner.style.display = "inline-block";
+        banner.textContent = `DEMO — SIMULATED (${data.active_scenario.toUpperCase()})`;
+    } else if (localSimulationActive && localActiveScenario) {
+        banner.style.display = "inline-block";
+        banner.textContent = `DEMO — LOCAL SIM (${localActiveScenario.toUpperCase()})`;
+    } else {
+        banner.style.display = "none";
+    }
+}
+
+function _updateLastUpdated(ok) {
+    const el = document.getElementById("telemetry-stat-secondary");
+    if (!el) return;
+    if (ok) {
+        const now = new Date();
+        el.textContent = `Updated ${now.toTimeString().slice(0, 8)} UTC`;
+    }
+}
+
+// Load telemetry graph. Discards stale responses via sequence counter.
+// On failure, preserves the last valid chart and applies bounded backoff.
+async function loadTelemetryGraph() {
+    if (_telemetryInFlight) return;
+    _telemetryInFlight = true;
+
+    const rangeElem = document.getElementById("telemetry-range");
+    const range = rangeElem ? rangeElem.value : "1h";
+    const seq = ++_telemetrySeq;
+
+    try {
+        const res = await fetch(`/api/telemetry?range=${encodeURIComponent(range)}`);
+        if (seq !== _telemetrySeq) return; // stale — a newer request superseded this one
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        let data;
+        try {
+            data = await res.json();
+        } catch (_) {
+            throw new Error("Malformed JSON response");
+        }
+
+        if (!data || !Array.isArray(data.series)) throw new Error("Missing series in response");
+
+        // Validate numeric fields; drop any point with non-finite values.
+        data.series = data.series.filter(s =>
+            Number.isFinite(s.inbound_mbps) &&
+            Number.isFinite(s.outbound_mbps) &&
+            Number.isFinite(s.packets_per_sec) &&
+            Number.isFinite(s.latency_ms)
+        );
+
+        latestTelemetryData = data;
+        _telemetryFailCount = 0;
+        _updateBanner(data);
+        _updateLastUpdated(true);
+        renderTelemetryChart();
+
+        // Reset interval to base rate after recovery.
+        if (!telemetryPaused && !document.hidden) _startTelemetryInterval();
+
+    } catch (err) {
+        if (seq !== _telemetrySeq) return;
+        _telemetryFailCount = Math.min(_telemetryFailCount + 1, 5);
+        // Preserve last valid chart — do not overwrite with synthetic fallback.
+        const banner = document.getElementById("simulation-banner");
+        if (banner && !latestTelemetryData) {
+            banner.style.display = "inline-block";
+            banner.textContent = `DEMO — API UNAVAILABLE (showing last known data)`;
+        }
+        if (!telemetryPaused && !document.hidden) _startTelemetryInterval();
+    } finally {
+        _telemetryInFlight = false;
+    }
+}
+
+// Attack simulation — idempotent: repeated clicks update scenario, never stack state.
+let _simInFlight = false;
 async function triggerAttackSimulation() {
+    if (_simInFlight) return;
+    _simInFlight = true;
+
     const scenarioElem = document.getElementById("attack-scenario");
     const scenario = scenarioElem ? scenarioElem.value : "spike";
-    
+
     localSimulationActive = true;
     localActiveScenario = scenario;
 
     const formData = new URLSearchParams();
     formData.append("scenario", scenario);
 
-    let simulatedEvents = [];
-    if (scenario === "spike") {
-        simulatedEvents = [{
-            timestamp: new Date().toTimeString().split(" ")[0],
-            severity: "warning",
-            rule_id: "NET-RULE-SPIKE",
-            src_ip: "192.0.2.50",
-            dst_ip: "192.168.1.1",
-            observed_label: "High Bandwidth Data Burst (850 Mbps)",
+    const now = new Date().toISOString();
+    const simulatedEvents = {
+        spike: [{
+            timestamp: now, severity: "warning", rule_id: "NET-RULE-SPIKE",
+            src_ip: "192.0.2.50", dst_ip: "192.168.1.1",
+            observed_label: "High Bandwidth Data Burst (850 Mbps) [SIMULATED]",
             recommended_action: "Inspect egress routes for data exfiltration."
-        }];
-    } else if (scenario === "portscan") {
-        simulatedEvents = [{
-            timestamp: new Date().toTimeString().split(" ")[0],
-            severity: "danger",
-            rule_id: "NET-RULE-PORT-SCAN",
-            src_ip: "192.0.2.10",
-            dst_ip: "192.168.1.50",
-            observed_label: "Rapid SYN Scan across 512 ports",
+        }],
+        portscan: [{
+            timestamp: now, severity: "danger", rule_id: "NET-RULE-PORT-SCAN",
+            src_ip: "192.0.2.10", dst_ip: "192.168.1.50",
+            observed_label: "Rapid SYN Scan across 512 ports [SIMULATED]",
             recommended_action: "Block source IP 192.0.2.10 at firewall perimeter."
-        }];
-    } else if (scenario === "bruteforce") {
-        simulatedEvents = [{
-            timestamp: new Date().toTimeString().split(" ")[0],
-            severity: "danger",
-            rule_id: "NET-RULE-BRUTEFORCE",
-            src_ip: "192.0.2.88",
-            dst_ip: "192.168.1.10",
-            observed_label: "42 failed SSH authentication attempts in 30s",
+        }],
+        bruteforce: [{
+            timestamp: now, severity: "danger", rule_id: "NET-RULE-BRUTEFORCE",
+            src_ip: "192.0.2.88", dst_ip: "192.168.1.10",
+            observed_label: "42 failed SSH authentication attempts in 30s [SIMULATED]",
             recommended_action: "Enforce SSH key-only authentication and rate limiting."
-        }];
-    }
+        }]
+    }[scenario] || [];
 
     try {
-        await fetch("/api/telemetry/simulate", {
-            method: "POST",
-            body: formData
-        });
-    } catch (err) {
-        // Backend simulate endpoint optional when offline; local fallback handles visuals
+        await fetch("/api/telemetry/simulate", { method: "POST", body: formData });
+    } catch (_) {
+        // Backend optional when offline; local state drives the chart.
+    } finally {
+        _simInFlight = false;
     }
 
     loadTelemetryGraph();
-    loadNetworkResults({ 
-        events: simulatedEvents, 
-        summary: { total: simulatedEvents.length, by_severity: { high: 1, medium: 0, low: 0 } } 
+    loadNetworkResults({
+        events: simulatedEvents,
+        summary: { total: simulatedEvents.length, by_severity: { high: 1, medium: 0, low: 0 } }
     });
 }
 
-// Reset attack simulation
+// Reset attack simulation — clears demo state and the results table.
 async function resetAttackSimulation() {
     localSimulationActive = false;
     localActiveScenario = null;
@@ -324,40 +388,35 @@ async function resetAttackSimulation() {
     formData.append("scenario", "reset");
 
     try {
-        await fetch("/api/telemetry/simulate", {
-            method: "POST",
-            body: formData
-        });
-    } catch (err) {
-        // Fallback handles local reset
-    }
+        await fetch("/api/telemetry/simulate", { method: "POST", body: formData });
+    } catch (_) {}
+
+    // Clear the network results table so simulated events don't persist.
+    const container = document.getElementById("network-results-container");
+    if (container) container.classList.add("hidden");
 
     loadTelemetryGraph();
 }
 
-// Toggle live telemetry polling on/off
+// Toggle live telemetry polling. Guarantees exactly one interval is active.
 function toggleTelemetryLive() {
     const btn = document.getElementById("telemetry-toggle-btn");
     if (telemetryPaused) {
-        // Resume live updates
         telemetryPaused = false;
-        telemetryLiveInterval = setInterval(loadTelemetryGraph, 5000);
+        _startTelemetryInterval();
+        loadTelemetryGraph();
         if (btn) btn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
     } else {
-        // Pause live updates
         telemetryPaused = true;
-        if (telemetryLiveInterval) {
-            clearInterval(telemetryLiveInterval);
-            telemetryLiveInterval = null;
-        }
+        _stopTelemetryInterval();
         if (btn) btn.innerHTML = '<i class="fa-solid fa-play"></i> Resume';
     }
 }
 
-// Initialize telemetry chart and live updates
+// Initialize telemetry chart and start the single polling loop.
 function initTelemetryChart() {
     loadTelemetryGraph();
-    telemetryLiveInterval = setInterval(loadTelemetryGraph, 5000);
+    _startTelemetryInterval();
     window.addEventListener("resize", renderTelemetryChart);
 }
 
