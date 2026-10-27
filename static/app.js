@@ -457,6 +457,7 @@ async function loadNetworkResults(data) {
             </tr>
         `;
     }
+}
 
 // Investigation management
 function loadInvestigations() {
