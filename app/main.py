@@ -574,3 +574,136 @@ async def api_telemetry(time_range: Literal["15m", "1h", "6h", "24h"] = Query("1
         "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "series": series,
     }
+
+
+# --- Network Security Analytics API ---
+@app.get("/api/analytics")
+async def api_analytics(time_range: Literal["24H", "7D", "30D", "90D"] = Query("24H", alias="range")):
+    """Return aggregated network security analytics metrics, 12-point mini charts, and telemetry curve."""
+    import random
+    import math
+
+    # Seed deterministically by day/hour for consistent rendering
+    now_ts = int(datetime.utcnow().timestamp())
+    seed_offset = {"24H": 1, "7D": 7, "30D": 30, "90D": 90}.get(time_range, 1)
+    rng = random.Random(now_ts // 3600 + seed_offset)
+
+    # Base ranges and intervals
+    labels_map = {
+        "24H": ("Last 24 hours compared with the previous 24 hours", 24 * 3600, 2 * 3600, "%H:00"),
+        "7D":  ("Last 7 days compared with the previous 7 days", 7 * 86400, 14 * 3600, "%b %d"),
+        "30D": ("Last 30 days compared with the previous 30 days", 30 * 86400, 60 * 3600, "%b %d"),
+        "90D": ("Last 90 days compared with the previous 90 days", 90 * 86400, 180 * 3600, "%b %d"),
+    }
+    comp_subline, total_sec, step_sec, date_fmt = labels_map.get(time_range, labels_map["24H"])
+
+    # 1. Throughput (Mbps)
+    base_tp = {"24H": 34.2, "7D": 41.8, "30D": 38.5, "90D": 45.1}[time_range]
+    tp_val = round(base_tp + rng.uniform(-1.5, 2.5), 1)
+    tp_pct = round(rng.uniform(-4.2, 8.6), 1)
+    tp_bars = [round(max(10.0, base_tp + math.sin(i * 0.6) * 12 + rng.uniform(-3, 3)), 1) for i in range(12)]
+
+    # 2. Threat Events
+    base_threats = {"24H": 14, "7D": 89, "30D": 342, "90D": 1120}[time_range]
+    threat_val = int(base_threats + rng.randint(-3, 5))
+    threat_pct = round(rng.uniform(-12.5, 18.4), 1)
+    threat_bars = [max(1, int((base_threats / 12) + math.sin(i * 0.8) * 4 + rng.randint(-2, 3))) for i in range(12)]
+
+    # 3. Active Hosts
+    base_hosts = {"24H": 48, "7D": 124, "30D": 310, "90D": 850}[time_range]
+    hosts_val = int(base_hosts + rng.randint(-2, 6))
+    hosts_diff = rng.randint(-5, 14)
+    hosts_bars = [max(5, int((base_hosts / 12) * 1.5 + math.cos(i * 0.5) * 8 + rng.randint(-3, 3))) for i in range(12)]
+
+    # 4. Latency (ms)
+    base_lat = {"24H": 18.4, "7D": 19.2, "30D": 21.0, "90D": 22.8}[time_range]
+    lat_val = round(base_lat + rng.uniform(-1.0, 1.8), 1)
+    lat_diff = round(rng.uniform(-2.5, 3.2), 1)
+    lat_bars = [round(max(5.0, base_lat + math.cos(i * 0.7) * 4 + rng.uniform(-1.5, 1.5)), 1) for i in range(12)]
+
+    # Timeline series for main chart (12 evenly spaced points across interval)
+    main_series = []
+    for i in range(12):
+        ts = now_ts - ((11 - i) * step_sec)
+        dt_label = datetime.utcfromtimestamp(ts).strftime(date_fmt)
+        in_val = round(max(5.0, base_tp * 0.9 + math.sin(i * 0.55) * 14.0 + rng.uniform(-3, 3)), 1)
+        out_val = round(max(3.0, (base_tp * 0.45) + math.cos(i * 0.55) * 7.0 + rng.uniform(-2, 2)), 1)
+        main_series.append({
+            "timestamp": dt_label,
+            "inbound_mbps": in_val,
+            "outbound_mbps": out_val,
+        })
+
+    return {
+        "range": time_range,
+        "comparison_subline": comp_subline,
+        "metrics": {
+            "throughput": {
+                "label": "Network Throughput",
+                "value": tp_val,
+                "unit": "Mbps",
+                "change_pct": tp_pct,
+                "favorable": tp_pct >= 0,
+                "bars": tp_bars
+            },
+            "threats": {
+                "label": "Threat Events",
+                "value": threat_val,
+                "unit": "events",
+                "change_pct": threat_pct,
+                "favorable": threat_pct <= 0, # Fewer threats is favorable
+                "bars": threat_bars
+            },
+            "hosts": {
+                "label": "Active Hosts",
+                "value": hosts_val,
+                "unit": "hosts",
+                "change_abs": hosts_diff,
+                "favorable": hosts_diff >= 0,
+                "bars": hosts_bars
+            },
+            "latency": {
+                "label": "Average Latency",
+                "value": lat_val,
+                "unit": "ms",
+                "change_diff": lat_diff,
+                "favorable": lat_diff <= 0, # Lower latency is favorable
+                "bars": lat_bars
+            }
+        },
+        "chart_series": main_series,
+        "source": "DEMO DATA (Security Analytics Aggregator)"
+    }
+
+
+@app.get("/api/analytics/export")
+async def api_analytics_export(time_range: Literal["24H", "7D", "30D", "90D"] = Query("24H", alias="range")):
+    """Export currently selected range analytics as CSV data."""
+    import io
+    import csv
+
+    analytics = await api_analytics(time_range=time_range)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Net Sentinel Network Security Analytics Report"])
+    writer.writerow(["Range", time_range])
+    writer.writerow(["Comparison Period", analytics["comparison_subline"]])
+    writer.writerow(["Generated At (UTC)", datetime.utcnow().isoformat()])
+    writer.writerow([])
+    writer.writerow(["Metric", "Current Value", "Unit", "Change Indicator"])
+    m = analytics["metrics"]
+    writer.writerow([m["throughput"]["label"], m["throughput"]["value"], m["throughput"]["unit"], f"{m['throughput']['change_pct']}%"])
+    writer.writerow([m["threats"]["label"], m["threats"]["value"], m["threats"]["unit"], f"{m['threats']['change_pct']}%"])
+    writer.writerow([m["hosts"]["label"], m["hosts"]["value"], m["hosts"]["unit"], f"{m['hosts']['change_abs']} hosts"])
+    writer.writerow([m["latency"]["label"], m["latency"]["value"], m["latency"]["unit"], f"{m['latency']['change_diff']} ms"])
+    writer.writerow([])
+    writer.writerow(["Timestamp Interval", "Inbound Traffic (Mbps)", "Outbound Traffic (Mbps)"])
+    for pt in analytics["chart_series"]:
+        writer.writerow([pt["timestamp"], pt["inbound_mbps"], pt["outbound_mbps"]])
+
+    from fastapi.responses import Response
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=net_sentinel_analytics_{time_range.lower()}.csv"}
+    )

@@ -154,3 +154,29 @@ def test_csv_upload_missing_columns(tmp_path):
         response = client.post("/api/network/analyze", files=files)
     assert response.status_code == 400
     assert "Required columns" in response.json()["detail"]
+
+
+def test_api_analytics_24h():
+    response = client.get("/api/analytics?range=24H")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["range"] == "24H"
+    assert "metrics" in data
+    assert "chart_series" in data
+
+
+def test_api_analytics_7d():
+    response = client.get("/api/analytics?range=7D")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["range"] == "7D"
+    assert "metrics" in data
+    assert "chart_series" in data
+
+
+def test_api_analytics_export_24h():
+    response = client.get("/api/analytics/export?range=24H")
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+    assert "attachment" in response.headers.get("content-disposition", "")
+

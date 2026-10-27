@@ -80,10 +80,12 @@ function switchView(targetId) {
         document.getElementById("current-page-title").textContent = titleText;
     }, 300);
 
-    // Special handling for overview to restart telemetry chart
-    if (targetId === "overview-view") {
-        setTimeout(renderTelemetryChart, 350);
-    }
+        // Special handling for overview or analytics to restart charts
+        if (targetId === "overview-view") {
+            setTimeout(renderTelemetryChart, 350);
+        } else if (targetId === "analytics-view") {
+            setTimeout(() => loadAnalyticsData(currentAnalyticsRange), 350);
+        }
 }
 
 // Load overview metrics from API
@@ -773,4 +775,210 @@ async function generateReport() {
     } catch (err) {
         alert("Failed to generate report.");
     }
+}
+
+// ==========================================================================
+// Network Security Analytics Controller (24H, 7D, 30D, 90D)
+// ==========================================================================
+let currentAnalyticsRange = "24H";
+let latestAnalyticsData = null;
+
+async function setAnalyticsRange(range) {
+    currentAnalyticsRange = range;
+    
+    // Update active button state
+    document.querySelectorAll(".analytics-range-btn").forEach(btn => {
+        if (btn.getAttribute("data-range") === range) {
+            btn.className = "analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all bg-[#1c2944] text-white border border-[#38bdf8]/40 shadow-sm";
+        } else {
+            btn.className = "analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white";
+        }
+    });
+
+    await loadAnalyticsData(range);
+}
+
+async function loadAnalyticsData(range = "24H") {
+    try {
+        const res = await fetch(`/api/analytics?range=${range}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        latestAnalyticsData = data;
+        renderAnalyticsUI(data);
+    } catch (err) {
+        console.warn("Analytics API unavailable, generating local fallback dataset", err);
+        const fallback = generateLocalAnalyticsData(range);
+        latestAnalyticsData = fallback;
+        renderAnalyticsUI(fallback);
+    }
+}
+
+function renderAnalyticsUI(data) {
+    // 1. Subtitle & Comparison line
+    const subline = document.getElementById("analytics-subline");
+    if (subline && data.comparison_subline) {
+        subline.textContent = data.comparison_subline;
+    }
+
+    const m = data.metrics;
+    if (!m) return;
+
+    // 2. Metric 1: Throughput
+    const m_tp_val = document.getElementById("m-tp-val");
+    if (m_tp_val) m_tp_val.textContent = m.throughput.value;
+    const m_tp_pill = document.getElementById("m-tp-pill");
+    if (m_tp_pill) {
+        const sign = m.throughput.change_pct >= 0 ? "+" : "";
+        m_tp_pill.innerHTML = `<i class="fa-solid fa-arrow-trend-${m.throughput.change_pct >= 0 ? 'up' : 'down'} text-[9px]"></i> ${sign}${m.throughput.change_pct}%`;
+        m_tp_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.throughput.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
+    }
+    renderMiniBars("m-tp-chart", m.throughput.bars, m.throughput.favorable ? "#10b981" : "#f43f5e");
+
+    // 3. Metric 2: Threat Events
+    const m_threat_val = document.getElementById("m-threat-val");
+    if (m_threat_val) m_threat_val.textContent = m.threats.value;
+    const m_threat_pill = document.getElementById("m-threat-pill");
+    if (m_threat_pill) {
+        const sign = m.threats.change_pct >= 0 ? "+" : "";
+        m_threat_pill.innerHTML = `<i class="fa-solid fa-arrow-trend-${m.threats.change_pct >= 0 ? 'up' : 'down'} text-[9px]"></i> ${sign}${m.threats.change_pct}%`;
+        m_threat_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.threats.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
+    }
+    renderMiniBars("m-threat-chart", m.threats.bars, m.threats.favorable ? "#38bdf8" : "#f43f5e");
+
+    // 4. Metric 3: Active Hosts
+    const m_hosts_val = document.getElementById("m-hosts-val");
+    if (m_hosts_val) m_hosts_val.textContent = m.hosts.value;
+    const m_hosts_pill = document.getElementById("m-hosts-pill");
+    if (m_hosts_pill) {
+        const sign = m.hosts.change_abs >= 0 ? "+" : "";
+        m_hosts_pill.innerHTML = `<i class="fa-solid fa-arrow-${m.hosts.change_abs >= 0 ? 'up' : 'down'} text-[9px]"></i> ${sign}${m.hosts.change_abs} hosts`;
+        m_hosts_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.hosts.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
+    }
+    renderMiniBars("m-hosts-chart", m.hosts.bars, "#38bdf8");
+
+    // 5. Metric 4: Average Latency
+    const m_lat_val = document.getElementById("m-lat-val");
+    if (m_lat_val) m_lat_val.textContent = m.latency.value;
+    const m_lat_pill = document.getElementById("m-lat-pill");
+    if (m_lat_pill) {
+        const sign = m.latency.change_diff >= 0 ? "+" : "";
+        m_lat_pill.innerHTML = `<i class="fa-solid fa-arrow-${m.latency.change_diff <= 0 ? 'down' : 'up'} text-[9px]"></i> ${sign}${m.latency.change_diff} ms`;
+        m_lat_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.latency.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
+    }
+    renderMiniBars("m-lat-chart", m.latency.bars, m.latency.favorable ? "#10b981" : "#f59e0b");
+
+    // 6. Main Telemetry SVG Area Chart
+    renderAnalyticsSvgChart(data.chart_series);
+}
+
+function renderMiniBars(containerId, values, barColor) {
+    const el = document.getElementById(containerId);
+    if (!el || !values || !values.length) return;
+    const max = Math.max(...values, 1);
+    el.innerHTML = values.map(v => {
+        const hPct = Math.max(12, Math.round((v / max) * 100));
+        return `<span class="flex-1 rounded-sm opacity-80 hover:opacity-100 transition-all cursor-pointer" style="height: ${hPct}%; background-color: ${barColor};" title="${v}"></span>`;
+    }).join("");
+}
+
+function renderAnalyticsSvgChart(series) {
+    const svg = document.getElementById("analytics-svg-chart");
+    const axisLabels = document.getElementById("analytics-axis-labels");
+    if (!svg || !series || !series.length) return;
+
+    const maxIn = Math.max(...series.map(s => s.inbound_mbps), 10);
+    const maxOut = Math.max(...series.map(s => s.outbound_mbps), 5);
+    const maxVal = Math.max(maxIn, maxOut * 1.5, 20);
+
+    const W = 1000;
+    const H = 200;
+    const n = series.length;
+    const stepX = W / (n - 1);
+
+    // Compute coordinates
+    const inPoints = series.map((pt, i) => {
+        const x = i * stepX;
+        const y = H - (pt.inbound_mbps / maxVal) * (H - 30) - 15;
+        return { x, y, pt };
+    });
+
+    const outPoints = series.map((pt, i) => {
+        const x = i * stepX;
+        const y = H - (pt.outbound_mbps / maxVal) * (H - 30) - 15;
+        return { x, y, pt };
+    });
+
+    const inPolyline = inPoints.map(p => `${p.x},${p.y}`).join(" ");
+    const outPolyline = outPoints.map(p => `${p.x},${p.y}`).join(" ");
+    const inArea = `0,${H} ` + inPolyline + ` ${W},${H}`;
+    const outArea = `0,${H} ` + outPolyline + ` ${W},${H}`;
+
+    svg.innerHTML = `
+        <defs>
+            <linearGradient id="inboundGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
+            </linearGradient>
+            <linearGradient id="outboundGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
+            </linearGradient>
+        </defs>
+
+        <!-- Subtle Grid Lines -->
+        <line x1="0" y1="40" x2="${W}" y2="40" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
+        <line x1="0" y1="90" x2="${W}" y2="90" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
+        <line x1="0" y1="140" x2="${W}" y2="140" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
+
+        <!-- Inbound Area & Path -->
+        <polygon points="${inArea}" fill="url(#inboundGradient)" />
+        <polyline fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${inPolyline}" />
+
+        <!-- Outbound Area & Path -->
+        <polygon points="${outArea}" fill="url(#outboundGradient)" />
+        <polyline fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${outPolyline}" />
+
+        <!-- Interactive Data Dots -->
+        ${inPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#10b981" stroke="#090e1c" stroke-width="1.5"><title>Inbound: ${p.pt.inbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
+        ${outPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#38bdf8" stroke="#090e1c" stroke-width="1.5"><title>Outbound: ${p.pt.outbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
+    `;
+
+    // Axis labels
+    if (axisLabels) {
+        axisLabels.innerHTML = series.map((s, idx) => {
+            // Show every 2nd or 3rd label on small screens
+            return `<span>${s.timestamp}</span>`;
+        }).filter((_, idx) => idx % 2 === 0 || idx === n - 1).join("");
+    }
+}
+
+function exportAnalyticsReport() {
+    window.location.href = `/api/analytics/export?range=${currentAnalyticsRange}`;
+}
+
+function generateLocalAnalyticsData(range) {
+    const sublines = {
+        "24H": "Last 24 hours compared with the previous 24 hours.",
+        "7D": "Last 7 days compared with the previous 7 days.",
+        "30D": "Last 30 days compared with the previous 30 days.",
+        "90D": "Last 90 days compared with the previous 90 days."
+    };
+    return {
+        range: range,
+        comparison_subline: sublines[range] || sublines["24H"],
+        metrics: {
+            throughput: { label: "Network Throughput", value: 34.2, change_pct: 5.2, favorable: true, bars: [12, 18, 22, 28, 32, 35, 41, 38, 30, 26, 31, 34] },
+            threats: { label: "Threat Events", value: 14, change_pct: -8.4, favorable: true, bars: [3, 1, 4, 2, 0, 1, 2, 0, 1, 0, 1, 0] },
+            hosts: { label: "Active Hosts", value: 48, change_abs: 4, favorable: true, bars: [35, 38, 40, 42, 45, 44, 46, 47, 45, 46, 48, 48] },
+            latency: { label: "Average Latency", value: 18.4, change_diff: -1.2, favorable: true, bars: [22, 21, 20, 19, 19, 18, 19, 18, 18, 17, 18, 18] }
+        },
+        chart_series: [
+            { timestamp: "00:00", inbound_mbps: 22.1, outbound_mbps: 10.4 },
+            { timestamp: "04:00", inbound_mbps: 18.5, outbound_mbps: 8.2 },
+            { timestamp: "08:00", inbound_mbps: 34.2, outbound_mbps: 15.6 },
+            { timestamp: "12:00", inbound_mbps: 42.8, outbound_mbps: 21.0 },
+            { timestamp: "16:00", inbound_mbps: 38.6, outbound_mbps: 18.2 },
+            { timestamp: "20:00", inbound_mbps: 29.4, outbound_mbps: 13.5 }
+        ]
+    };
 }
