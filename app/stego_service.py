@@ -5,6 +5,8 @@ import os
 from PIL import Image
 from typing import Dict, Tuple, Optional
 
+Image.MAX_IMAGE_PIXELS = 25_000_000
+
 
 def calculate_sha256(file_bytes: bytes) -> str:
     return hashlib.sha256(file_bytes).hexdigest()
