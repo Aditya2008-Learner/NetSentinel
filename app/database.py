@@ -13,15 +13,8 @@ else:
     DB_PATH = pathlib.Path("data/netsentinel.db")
 
 
-def get_db_connection() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db() -> None:
-    conn = get_db_connection()
+def init_db_conn(conn: sqlite3.Connection) -> None:
+    """Initialize schema tables using an existing connection."""
     cursor = conn.cursor()
 
     # Investigations table
@@ -85,7 +78,24 @@ def init_db() -> None:
     )
 
     conn.commit()
-    conn.close()
+
+
+def get_db_connection() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    is_new = not DB_PATH.exists()
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    if is_new:
+        init_db_conn(conn)
+    return conn
+
+
+def init_db() -> None:
+    conn = get_db_connection()
+    try:
+        init_db_conn(conn)
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

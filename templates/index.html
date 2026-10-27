@@ -392,13 +392,13 @@
                         <h3><i class="fa-solid fa-file-csv" style="color: var(--accent-emerald);"></i> Upload Connection Logs (CSV)</h3>
                         <p style="margin-bottom: 16px;">Select an authorized network packet capture or flow CSV export to scan for anomalous spikes, port scans, and brute-force attempts.</p>
                         <form id="network-upload-form" class="upload-box">
-                            <div class="upload-drop-zone" onclick="document.getElementById('log-file-input').click()">
+                            <div class="upload-drop-zone" id="network-drop-zone">
                                 <i class="fa-solid fa-cloud-arrow-up"></i>
                                 <p style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Click to select or drop CSV traffic logs</p>
                                 <p style="font-size: 0.8rem; color: var(--text-muted);">Required schema: timestamp, src_ip, dst_ip, src_port, dst_port, protocol, bytes</p>
                                 <div id="selected-file-display" style="display: none; margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; color: var(--accent-emerald);"></div>
                             </div>
-                            <input type="file" id="log-file-input" accept=".csv" style="display: none;" required onchange="const f = this.files[0]; const d = document.getElementById('selected-file-display'); if (f) { d.style.display = 'block'; d.textContent = `Selected: ${f.name} (${(f.size/1024).toFixed(1)} KB)`; }" />
+                            <input type="file" id="log-file-input" accept=".csv" style="display: none;" />
                             <button type="submit" class="btn btn-primary" style="margin-top: 8px;">
                                 <i class="fa-solid fa-microchip"></i> Analyze Traffic Logs
                             </button>

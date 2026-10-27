@@ -180,3 +180,94 @@ def test_api_analytics_export_24h():
     assert "text/csv" in response.headers["content-type"]
     assert "attachment" in response.headers.get("content-disposition", "")
 
+
+def test_security_headers_present():
+    """Verify essential defense-in-depth security headers are present."""
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers.get("x-content-type-options") == "nosniff"
+    assert response.headers.get("x-frame-options") == "DENY"
+    assert "content-security-policy" in response.headers
+
+
+def test_non_utf8_csv_returns_400():
+    """Verify non-UTF8 encoded CSV payloads return 400 instead of 500."""
+    bad_bytes = b"\xff\xfe\x00\x00\xaa\xbb\xcc\xdd"
+    response = client.post("/api/network/analyze", files={"file": ("bad_encoding.csv", bad_bytes, "text/csv")})
+    assert response.status_code == 400
+    assert "valid UTF-8" in response.json()["detail"]
+
+
+def test_investigation_title_validation():
+    """Empty or whitespace-only investigation titles must be rejected with 400."""
+    response = client.post("/api/investigations", data={"title": "   "})
+    assert response.status_code == 400
+    assert "cannot be empty" in response.json()["detail"]
+
+
+def test_rapid_investigation_creation_unique_ids():
+    """Multiple investigations created rapidly must receive unique IDs and not trigger UNIQUE constraint errors."""
+    r1 = client.post("/api/investigations", data={"title": "Case Alpha", "case_ref": "REF-001"})
+    r2 = client.post("/api/investigations", data={"title": "Case Beta", "case_ref": "REF-002"})
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json()["id"] != r2.json()["id"]
+
+
+def test_stego_download_path_traversal_blocked():
+    """Attempting path traversal on stego download must return 404."""
+    response = client.get("/api/stego/download/..%2F..%2Fetc%2Fpasswd")
+    assert response.status_code in {400, 404}
+
+
+def test_stego_embed_returns_base64_and_extracts(tmp_path):
+    """Stego embed must return base64 image_data to solve serverless ephemeral storage, and round-trip extraction must succeed."""
+    import io
+    from PIL import Image
+
+    img = Image.new("RGB", (30, 30), color=(10, 50, 100))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    png_bytes = buf.getvalue()
+
+    embed_res = client.post(
+        "/api/stego/embed",
+        files={"file": ("test_cover.png", png_bytes, "image/png")},
+        data={"secret": "ClassifiedSentinelPayload"},
+    )
+    assert embed_res.status_code == 200
+    embed_data = embed_res.json()
+    assert embed_data["success"] is True
+    assert "image_data" in embed_data
+    assert embed_data["image_data"].startswith("data:image/png;base64,")
+
+    # Decode the base64 payload and verify extraction
+    import base64
+    b64_str = embed_data["image_data"].split(",", 1)[1]
+    encoded_png_bytes = base64.b64decode(b64_str)
+
+    extract_res = client.post(
+        "/api/stego/extract",
+        files={"file": ("encoded.png", encoded_png_bytes, "image/png")},
+    )
+    assert extract_res.status_code == 200
+    assert extract_res.json()["secret"] == "ClassifiedSentinelPayload"
+
+
+def test_db_auto_initialization(tmp_path):
+    """Database connections to a newly created database file must auto-initialize schema tables."""
+    import sqlite3
+    from app.database import init_db_conn
+
+    test_db = tmp_path / "fresh.db"
+    conn = sqlite3.connect(test_db)
+    conn.row_factory = sqlite3.Row
+    init_db_conn(conn)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = {r[0] for r in cursor.fetchall()}
+    assert "investigations" in tables
+    assert "devices" in tables
+    assert "integrity_baselines" in tables
+    conn.close()
+

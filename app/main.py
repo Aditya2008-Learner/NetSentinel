@@ -4,12 +4,14 @@ Network Intelligence. Threat Detection. Digital Forensics.
 """
 
 import asyncio
+import base64
 import io
 import logging
 import os
 import pathlib
 import sqlite3
 import time
+import uuid
 from datetime import datetime
 from typing import List, Literal, Optional
 
@@ -28,6 +30,12 @@ from .stego_service import (
     extract_secret_from_image,
     analyze_image_forensics,
 )
+
+def _sanitize_filename(filename: Optional[str]) -> str:
+    """Return a sanitized basename stripped of path traversal characters."""
+    base = os.path.basename(filename or "file")
+    clean = base.lstrip("/\\.").strip()
+    return clean or "uploaded_file"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -65,11 +73,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Net Sentinel", version="1.0.0", lifespan=lifespan)
 
+cors_env = os.environ.get("CORS_ORIGINS", "").strip()
+cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()]
+if not cors_origins:
+    cors_origins = [
+        "https://net-sentinel-zeta.vercel.app",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.environ.get("CORS_ORIGINS", "").split(",") or ["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -86,6 +103,21 @@ async def _log_requests(request: Request, call_next):
         response.status_code,
         elapsed_ms,
     )
+    # Add defense-in-depth security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    if "Content-Security-Policy" not in response.headers:
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+            "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
+            "img-src 'self' data: blob:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
     return response
 
 
@@ -161,7 +193,10 @@ async def upload_log(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted for analysis")
     try:
         content = await _read_limited(file)
-        text = content.decode("utf-8")
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="CSV file encoding must be valid UTF-8")
         return await asyncio.to_thread(analyze_logs, text)
     except HTTPException:
         raise
@@ -183,7 +218,10 @@ async def upload_dash(request: Request, file: UploadFile = File(...)):
         )
     try:
         content = await _read_limited(file)
-        text = content.decode("utf-8-sig")
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="CSV file encoding must be valid UTF-8")
         events = await asyncio.to_thread(analyze_logs, text)
         summary = await asyncio.to_thread(summarize, events)
     except HTTPException as exc:
@@ -210,7 +248,10 @@ async def api_analyze_network_logs(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted for network analysis")
     try:
         content = await _read_limited(file)
-        text = content.decode("utf-8-sig")
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="CSV file encoding must be valid UTF-8")
         # Count non-empty data rows (minus header)
         lines = [line for line in text.splitlines() if line.strip()]
         total_rows = max(0, len(lines) - 1)
@@ -244,7 +285,13 @@ async def api_create_investigation(
     description: Optional[str] = Form(None),
     case_ref: Optional[str] = Form(None),
 ):
-    inv_id = f"INV-{int(datetime.utcnow().timestamp())}"
+    clean_title = (title or "").strip()
+    if not clean_title:
+        raise HTTPException(status_code=400, detail="Investigation title cannot be empty")
+    if len(clean_title) > 250:
+        raise HTTPException(status_code=400, detail="Investigation title too long (max 250 characters)")
+
+    inv_id = f"INV-{int(datetime.utcnow().timestamp())}-{uuid.uuid4().hex[:6]}"
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -253,12 +300,12 @@ async def api_create_investigation(
             INSERT INTO investigations (id, title, description, case_ref, status)
             VALUES (?, ?, ?, ?, 'Open')
             """,
-            (inv_id, title, description, case_ref),
+            (inv_id, clean_title, description, case_ref),
         )
         conn.commit()
     finally:
         conn.close()
-    return {"id": inv_id, "title": title, "status": "Open", "message": "Investigation created successfully"}
+    return {"id": inv_id, "title": clean_title, "status": "Open", "message": "Investigation created successfully"}
 
 
 # --- Steganography Lab API ---
@@ -267,58 +314,100 @@ async def api_embed_secret(
     file: UploadFile = File(...),
     secret: str = Form(...),
 ):
+    safe_name = _sanitize_filename(file.filename)
     file_bytes = await _read_limited(file)
-    file_path = UPLOAD_DIR / file.filename
-    output_path = UPLOAD_DIR / f"encoded_{file.filename.rsplit('.', 1)[0]}.png"
+    file_path = (UPLOAD_DIR / safe_name).resolve()
+    if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    encoded_id = uuid.uuid4().hex[:8]
+    out_name = f"encoded_{encoded_id}_{safe_name.rsplit('.', 1)[0]}.png"
+    output_path = (UPLOAD_DIR / out_name).resolve()
+    if not str(output_path).startswith(str(UPLOAD_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid output path")
 
     with open(file_path, "wb") as f:
         f.write(file_bytes)
 
-    success, msg = await asyncio.to_thread(embed_secret_in_image, str(file_path), secret, str(output_path))
-    if not success:
-        raise HTTPException(status_code=400, detail=msg)
+    try:
+        success, msg = await asyncio.to_thread(embed_secret_in_image, str(file_path), secret, str(output_path))
+        if not success:
+            raise HTTPException(status_code=400, detail=msg)
 
-    return {
-        "success": True,
-        "message": msg,
-        "download_url": f"/api/stego/download/{output_path.name}",
-    }
+        # Read the encoded output image as base64 so client can download it directly in-memory,
+        # completely solving multi-instance serverless ephemeral /tmp storage isolation.
+        with open(output_path, "rb") as out_fp:
+            encoded_bytes = out_fp.read()
+        image_data = f"data:image/png;base64,{base64.b64encode(encoded_bytes).decode('ascii')}"
+
+        return {
+            "success": True,
+            "message": msg,
+            "filename": output_path.name,
+            "download_url": f"/api/stego/download/{output_path.name}",
+            "image_data": image_data,
+        }
+    finally:
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 @app.get("/api/stego/download/{filename}")
 async def api_download_stego(filename: str):
-    file_path = UPLOAD_DIR / filename
-    if not file_path.exists():
+    safe_name = _sanitize_filename(filename)
+    file_path = (UPLOAD_DIR / safe_name).resolve()
+    if not str(file_path).startswith(str(UPLOAD_DIR.resolve())) or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type="image/png", filename=filename)
+    return FileResponse(file_path, media_type="image/png", filename=safe_name)
 
 
 @app.post("/api/stego/extract")
 async def api_extract_secret(file: UploadFile = File(...)):
+    safe_name = _sanitize_filename(file.filename)
     file_bytes = await _read_limited(file)
-    file_path = UPLOAD_DIR / file.filename
+    file_path = (UPLOAD_DIR / safe_name).resolve()
+    if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
     with open(file_path, "wb") as f:
         f.write(file_bytes)
 
-    success, result = await asyncio.to_thread(extract_secret_from_image, str(file_path))
-    if not success:
-        raise HTTPException(status_code=400, detail=result)
-
-    return {"success": True, "secret": result}
+    try:
+        success, result = await asyncio.to_thread(extract_secret_from_image, str(file_path))
+        if not success:
+            raise HTTPException(status_code=400, detail=result)
+        return {"success": True, "secret": result}
+    finally:
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 # --- Image Forensics API ---
 @app.post("/api/forensics/analyze")
 async def api_forensics_analyze(file: UploadFile = File(...)):
+    safe_name = _sanitize_filename(file.filename)
     file_bytes = await _read_limited(file)
-    file_path = UPLOAD_DIR / file.filename
+    file_path = (UPLOAD_DIR / safe_name).resolve()
+    if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
     with open(file_path, "wb") as f:
         f.write(file_bytes)
 
-    analysis = await asyncio.to_thread(analyze_image_forensics, str(file_path), file_bytes)
-    if "error" in analysis:
-        raise HTTPException(status_code=400, detail=analysis["error"])
-    return analysis
+    try:
+        analysis = await asyncio.to_thread(analyze_image_forensics, str(file_path), file_bytes)
+        if "error" in analysis:
+            raise HTTPException(status_code=400, detail=analysis["error"])
+        return analysis
+    finally:
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 # --- Integrity Verification API ---
@@ -327,6 +416,7 @@ async def api_integrity_verify(
     file: UploadFile = File(...),
     reference_hash: Optional[str] = Form(None),
 ):
+    safe_name = _sanitize_filename(file.filename)
     file_bytes = await _read_limited(file)
     current_hash = calculate_sha256(file_bytes)
 
@@ -334,6 +424,7 @@ async def api_integrity_verify(
     if reference_hash:
         match = current_hash.lower() == reference_hash.strip().lower()
 
+    unique_id = f"HASH-{int(datetime.utcnow().timestamp())}-{uuid.uuid4().hex[:6]}"
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -343,8 +434,8 @@ async def api_integrity_verify(
             VALUES (?, ?, ?, ?, ?)
             """,
             (
-                f"HASH-{int(datetime.utcnow().timestamp())}",
-                file.filename,
+                unique_id,
+                safe_name,
                 current_hash,
                 len(file_bytes),
                 "Verified via UI",
@@ -355,7 +446,7 @@ async def api_integrity_verify(
         conn.close()
 
     return {
-        "filename": file.filename,
+        "filename": safe_name,
         "current_sha256": current_hash,
         "reference_hash": reference_hash,
         "match": match,

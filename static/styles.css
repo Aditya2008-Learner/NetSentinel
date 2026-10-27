@@ -814,6 +814,14 @@ input[type="text"]:focus, textarea:focus, select:focus {
     background-color: rgba(16, 185, 129, 0.03);
 }
 
+.upload-drop-zone.dragover,
+.upload-drop-zone.drag-active {
+    border-color: var(--accent-emerald);
+    background-color: rgba(16, 185, 129, 0.08);
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
+    transform: scale(1.005);
+}
+
 .upload-drop-zone i {
     font-size: 2rem;
     color: var(--accent-emerald);

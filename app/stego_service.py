@@ -104,13 +104,17 @@ def analyze_image_forensics(image_path: str, file_bytes: bytes) -> Dict[str, obj
             file_size = len(file_bytes)
 
             # Heuristic LSB entropy/noise check
-            pixels = list(img.convert("RGB").getdata())
+            # Sample first 10,000 pixels without materializing entire image into memory
+            rgb_img = img.convert("RGB")
             lsb_count = 0
-            total_samples = min(len(pixels), 10000)
-            for i in range(total_samples):
-                r, g, b = pixels[i]
+            total_samples = 0
+            for pixel in rgb_img.getdata():
+                r, g, b = pixel
                 if (r & 1) ^ (g & 1) ^ (b & 1):
                     lsb_count += 1
+                total_samples += 1
+                if total_samples >= 10000:
+                    break
             
             noise_ratio = lsb_count / total_samples if total_samples > 0 else 0
             susposity_score = round(min(100, max(5, abs(noise_ratio - 0.5) * 100 + (15 if format_name == 'PNG' else 5))), 1)

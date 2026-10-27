@@ -14,6 +14,17 @@ let _telemetryFailCount = 0;
 const _TELEMETRY_BASE_MS = 5000;
 const _TELEMETRY_MAX_BACKOFF_MS = 30000;
 
+// Sanitize dynamic strings to prevent XSS injection
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     loadOverviewData();
@@ -31,6 +42,15 @@ document.addEventListener("visibilitychange", () => {
         loadTelemetryGraph();
     }
 });
+
+// Prevent default drag and drop behavior across window to prevent browser navigation to file:///
+window.addEventListener("dragover", (e) => {
+    e.preventDefault();
+}, false);
+
+window.addEventListener("drop", (e) => {
+    e.preventDefault();
+}, false);
 
 // Initialize navigation with smooth transitions
 function initNavigation() {
@@ -103,8 +123,8 @@ async function loadOverviewData() {
         if (data.recent_investigations && data.recent_investigations.length > 0) {
             recentList.innerHTML = data.recent_investigations.map(inv => `
                 <div style="padding: 8px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
-                    <div><strong>${inv.id}</strong>: ${inv.title}</div>
-                    <span class="badge badge-info">${inv.status}</span>
+                    <div><strong>${escapeHtml(inv.id)}</strong>: ${escapeHtml(inv.title)}</div>
+                    <span class="badge badge-info">${escapeHtml(inv.status)}</span>
                 </div>
             `).join("");
         } else {
@@ -440,20 +460,20 @@ async function loadNetworkResults(data) {
     if (data.events && data.events.length > 0) {
         tbody.innerHTML = data.events.map(e => `
             <tr>
-                <td>${e.timestamp}</td>
-                <td><span class="badge badge-${e.severity}">${e.severity}</span></td>
-                <td><code>${e.rule_id}</code></td>
-                <td><code>${e.src_ip}</code></td>
-                <td><code>${e.dst_ip}</code></td>
-                <td>${e.observed_label}</td>
-                <td>${e.recommended_action}</td>
+                <td>${escapeHtml(e.timestamp)}</td>
+                <td><span class="badge badge-${escapeHtml(e.severity)}">${escapeHtml(e.severity)}</span></td>
+                <td><code>${escapeHtml(e.rule_id)}</code></td>
+                <td><code>${escapeHtml(e.src_ip)}</code></td>
+                <td><code>${escapeHtml(e.dst_ip)}</code></td>
+                <td>${escapeHtml(e.observed_label)}</td>
+                <td>${escapeHtml(e.recommended_action)}</td>
             </tr>
         `).join("");
     } else {
         tbody.innerHTML = `
             <tr>
                 <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">
-                    No suspicious events detected across ${summary.total_records_analyzed || summary.total || 0} analyzed records.
+                    No suspicious events detected across ${escapeHtml(summary.total_records_analyzed || summary.total || 0)} analyzed records.
                     All network traffic is within normal heuristic thresholds.
                 </td>
             </tr>
@@ -476,11 +496,11 @@ function loadInvestigations() {
 
             tbody.innerHTML = investigations.map(inv => `
                 <tr>
-                    <td><code>${inv.id}</code></td>
-                    <td><strong>${inv.title}</strong></td>
-                    <td>${inv.case_ref || "N/A"}</td>
-                    <td><span class="badge badge-success">${inv.status}</span></td>
-                    <td>${inv.created_at}</td>
+                    <td><code>${escapeHtml(inv.id)}</code></td>
+                    <td><strong>${escapeHtml(inv.title)}</strong></td>
+                    <td>${escapeHtml(inv.case_ref || "N/A")}</td>
+                    <td><span class="badge badge-success">${escapeHtml(inv.status)}</span></td>
+                    <td>${escapeHtml(inv.created_at)}</td>
                 </tr>
             `).join("");
         })
@@ -491,15 +511,106 @@ function loadInvestigations() {
 
 // Form initialization
 function initForms() {
-    // Network Analysis Form
+    // 1. Network Analysis Form & Drag-and-Drop Handler
     const netForm = document.getElementById("network-upload-form");
+    const dropZone = document.getElementById("network-drop-zone") || document.querySelector(".upload-drop-zone");
+    const logFileInput = document.getElementById("log-file-input");
+    const selectedDisplay = document.getElementById("selected-file-display");
+
+    let stagedLogFile = null;
+
+    function renderLogFilePreview(file) {
+        if (!file || !selectedDisplay) return;
+        selectedDisplay.style.display = "block";
+        const sizeKb = (file.size / 1024).toFixed(1);
+        selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)`;
+
+        // Safe client-side header preview using FileReader
+        if (file.name.toLowerCase().endsWith(".csv") || (file.type && (file.type.includes("csv") || file.type.includes("text")))) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target && e.target.result;
+                if (typeof text === "string") {
+                    const firstLine = text.split("\n")[0].trim();
+                    if (firstLine) {
+                        selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)<br><span style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.9;">Header: ${escapeHtml(firstLine)}</span>`;
+                    }
+                }
+            };
+            reader.readAsText(file.slice(0, 1024));
+        }
+    }
+
+    if (dropZone && logFileInput) {
+        dropZone.addEventListener("click", () => {
+            logFileInput.click();
+        });
+
+        logFileInput.addEventListener("change", () => {
+            if (logFileInput.files && logFileInput.files.length > 0) {
+                stagedLogFile = logFileInput.files[0];
+                renderLogFilePreview(stagedLogFile);
+            }
+        });
+
+        dropZone.addEventListener("dragenter", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add("dragover");
+        });
+
+        dropZone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) {
+                e.dataTransfer.dropEffect = "copy";
+            }
+            dropZone.classList.add("dragover");
+        });
+
+        dropZone.addEventListener("dragleave", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove("dragover");
+        });
+
+        dropZone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove("dragover");
+
+            const dt = e.dataTransfer;
+            if (dt && dt.files && dt.files.length > 0) {
+                const dropped = dt.files[0];
+                if (!dropped.name.toLowerCase().endsWith(".csv")) {
+                    showNotification("Please select a valid CSV traffic log file.", "error");
+                    return;
+                }
+                stagedLogFile = dropped;
+                try {
+                    const container = new DataTransfer();
+                    container.items.add(dropped);
+                    logFileInput.files = container.files;
+                } catch (_) {
+                    // Staged file reference preserved for browsers lacking DataTransfer mutation
+                }
+                renderLogFilePreview(dropped);
+            }
+        });
+    }
+
     if (netForm) {
         let submitCount = 0;
         netForm.addEventListener("submit", async (e) => {
             e.preventDefault();
-            const fileInput = document.getElementById("log-file-input");
+            const file = (logFileInput && logFileInput.files && logFileInput.files[0]) || stagedLogFile;
+            if (!file) {
+                showNotification("Please select or drop a CSV file to analyze.", "error");
+                return;
+            }
+
             const formData = new FormData();
-            formData.append("file", fileInput.files[0]);
+            formData.append("file", file);
             
             // Get and disable the submit button
             const analyzeBtn = netForm.querySelector('button[type="submit"]');
@@ -528,7 +639,6 @@ function initForms() {
                     data = await res.json();
                 } catch (_) {
                     // Non-JSON response
-                    const txt = await res.text();
                     showNotification("Server returned invalid data (status " + res.status + ")", "error");
                     analyzeBtn.removeAttribute("disabled");
                     analyzeBtn.textContent = originalText;
@@ -551,13 +661,43 @@ function initForms() {
         });
     }
 
-    // Embed Form
+    // 2. Embed Form with safe local preview
     const embedForm = document.getElementById("embed-form");
+    const embedImageInput = document.getElementById("embed-image");
+    let currentEmbedPreviewUrl = null;
+
+    if (embedImageInput) {
+        embedImageInput.addEventListener("change", () => {
+            if (currentEmbedPreviewUrl) {
+                URL.revokeObjectURL(currentEmbedPreviewUrl);
+                currentEmbedPreviewUrl = null;
+            }
+            if (embedImageInput.files && embedImageInput.files[0]) {
+                const file = embedImageInput.files[0];
+                currentEmbedPreviewUrl = URL.createObjectURL(file);
+                let previewBox = document.getElementById("embed-preview-box");
+                if (!previewBox) {
+                    previewBox = document.createElement("div");
+                    previewBox.id = "embed-preview-box";
+                    previewBox.style.marginTop = "8px";
+                    embedImageInput.parentNode.appendChild(previewBox);
+                }
+                previewBox.innerHTML = `
+                    <img src="${currentEmbedPreviewUrl}" alt="Cover Image Preview" style="max-height: 100px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color); object-fit: contain; margin-top: 6px;" />
+                `;
+            }
+        });
+    }
+
     if (embedForm) {
         embedForm.addEventListener("submit", async (e) => {
             e.preventDefault();
-            const file = document.getElementById("embed-image").files[0];
+            const file = embedImageInput ? embedImageInput.files[0] : null;
             const secret = document.getElementById("embed-secret").value;
+            if (!file) {
+                alert("Please select a cover PNG image.");
+                return;
+            }
             const formData = new FormData();
             formData.append("file", file);
             formData.append("secret", secret);
@@ -568,9 +708,17 @@ function initForms() {
                 const box = document.getElementById("embed-result");
                 box.classList.remove("hidden");
                 if (res.ok) {
-                    box.innerHTML = `✅ ${data.message}<br><a href="${data.download_url}" class="btn btn-primary" style="margin-top: 10px;" download>Download Encoded PNG</a>`;
+                    const downloadHref = data.image_data || data.download_url;
+                    const fileName = data.filename || "encoded_image.png";
+                    box.innerHTML = `
+                        <div style="margin-bottom: 8px;">✅ ${escapeHtml(data.message)}</div>
+                        ${data.image_data ? `<img src="${data.image_data}" alt="Encoded Preview" style="max-height: 100px; display: block; border-radius: 6px; margin: 8px 0; border: 1px solid var(--border-color);" />` : ''}
+                        <a href="${downloadHref}" class="btn btn-primary" style="margin-top: 6px; display: inline-block;" download="${escapeHtml(fileName)}">
+                            <i class="fa-solid fa-download"></i> Download Encoded PNG
+                        </a>
+                    `;
                 } else {
-                    box.innerHTML = `❌ Error: ${data.detail}`;
+                    box.innerHTML = `❌ Error: ${escapeHtml(data.detail)}`;
                 }
             } catch (err) {
                 alert("Embedding failed.");
@@ -578,7 +726,7 @@ function initForms() {
         });
     }
 
-    // Extract Form
+    // 3. Extract Form
     const extractForm = document.getElementById("extract-form");
     if (extractForm) {
         extractForm.addEventListener("submit", async (e) => {
@@ -603,12 +751,48 @@ function initForms() {
         });
     }
 
-    // Forensics Form
+    // 4. Forensics Form with safe local preview via URL.createObjectURL
     const forensicsForm = document.getElementById("forensics-form");
+    const forensicsFile = document.getElementById("forensics-file");
+    let currentForensicsPreviewUrl = null;
+
+    if (forensicsFile) {
+        forensicsFile.addEventListener("change", () => {
+            if (currentForensicsPreviewUrl) {
+                URL.revokeObjectURL(currentForensicsPreviewUrl);
+                currentForensicsPreviewUrl = null;
+            }
+            if (forensicsFile.files && forensicsFile.files[0]) {
+                const file = forensicsFile.files[0];
+                if (file.type.startsWith("image/")) {
+                    currentForensicsPreviewUrl = URL.createObjectURL(file);
+                    let previewBox = document.getElementById("forensics-preview-box");
+                    if (!previewBox) {
+                        previewBox = document.createElement("div");
+                        previewBox.id = "forensics-preview-box";
+                        previewBox.style.marginTop = "12px";
+                        previewBox.style.textAlign = "center";
+                        forensicsFile.parentNode.appendChild(previewBox);
+                    }
+                    previewBox.innerHTML = `
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">
+                            Selected: <strong>${escapeHtml(file.name)}</strong> (${(file.size / 1024).toFixed(1)} KB)
+                        </div>
+                        <img src="${currentForensicsPreviewUrl}" alt="Local Forensics Preview" style="max-height: 140px; max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color); object-fit: contain; margin: 0 auto; display: block;" />
+                    `;
+                }
+            }
+        });
+    }
+
     if (forensicsForm) {
         forensicsForm.addEventListener("submit", async (e) => {
             e.preventDefault();
-            const file = document.getElementById("forensics-file").files[0];
+            const file = forensicsFile ? forensicsFile.files[0] : null;
+            if (!file) {
+                alert("Please select an image file.");
+                return;
+            }
             const formData = new FormData();
             formData.append("file", file);
 
@@ -619,13 +803,13 @@ function initForms() {
                 container.classList.remove("hidden");
                 const details = document.getElementById("forensics-details");
                 details.innerHTML = `
-                    <div><strong>Filename:</strong> ${data.filename}</div>
-                    <div><strong>Format:</strong> ${data.format} (${data.mode})</div>
-                    <div><strong>Dimensions:</strong> ${data.dimensions}</div>
-                    <div><strong>File Size:</strong> ${data.file_size_bytes} bytes</div>
-                    <div><strong>SHA-256:</strong> <code>${data.sha256}</code></div>
-                    <div><strong>Susposity Score:</strong> <span class="badge badge-warning">${data.susposity_score} / 100</span></div>
-                    <div style="grid-column: span 2;"><strong>Heuristic Indicators:</strong><ul>${data.indicators.map(i => `<li>${i}</li>`).join("")}</ul></div>
+                    <div><strong>Filename:</strong> ${escapeHtml(data.filename)}</div>
+                    <div><strong>Format:</strong> ${escapeHtml(data.format)} (${escapeHtml(data.mode)})</div>
+                    <div><strong>Dimensions:</strong> ${escapeHtml(data.dimensions)}</div>
+                    <div><strong>File Size:</strong> ${escapeHtml(data.file_size_bytes)} bytes</div>
+                    <div><strong>SHA-256:</strong> <code>${escapeHtml(data.sha256)}</code></div>
+                    <div><strong>Susposity Score:</strong> <span class="badge badge-warning">${escapeHtml(data.susposity_score)} / 100</span></div>
+                    <div style="grid-column: span 2;"><strong>Heuristic Indicators:</strong><ul>${(data.indicators || []).map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>
                 `;
             } catch (err) {
                 alert("Forensics analysis failed.");
@@ -658,8 +842,8 @@ function initForms() {
                 }
 
                 box.innerHTML = `
-                    <strong>File:</strong> ${data.filename}<br>
-                    <strong>Computed SHA-256:</strong> <code>${data.current_sha256}</code>
+                    <strong>File:</strong> ${escapeHtml(data.filename)}<br>
+                    <strong>Computed SHA-256:</strong> <code>${escapeHtml(data.current_sha256)}</code>
                     ${matchHtml}
                 `;
             } catch (err) {
@@ -764,14 +948,30 @@ function closeModal() {
     document.getElementById("investigation-modal").classList.add("hidden");
 }
 
-// Report generation
+// Report generation with safe Blob download
 async function generateReport() {
     try {
         const res = await fetch("/api/reports/export");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const preview = document.getElementById("report-preview");
-        preview.classList.remove("hidden");
-        document.getElementById("report-json-output").textContent = JSON.stringify(data, null, 2);
+        if (preview) {
+            preview.classList.remove("hidden");
+            const output = document.getElementById("report-json-output");
+            if (output) output.textContent = JSON.stringify(data, null, 2);
+        }
+
+        // Trigger safe client-side download via Blob URL
+        const jsonBlob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const blobUrl = URL.createObjectURL(jsonBlob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `net_sentinel_report_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        showNotification("Investigation report exported successfully", "success");
     } catch (err) {
         alert("Failed to generate report.");
     }
@@ -952,8 +1152,24 @@ function renderAnalyticsSvgChart(series) {
     }
 }
 
-function exportAnalyticsReport() {
-    window.location.href = `/api/analytics/export?range=${currentAnalyticsRange}`;
+async function exportAnalyticsReport() {
+    try {
+        const res = await fetch(`/api/analytics/export?range=${encodeURIComponent(currentAnalyticsRange)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `net_sentinel_analytics_${currentAnalyticsRange.toLowerCase()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showNotification("Analytics CSV exported successfully", "success");
+    } catch (err) {
+        console.error("Export download failed, falling back to direct navigation", err);
+        window.location.href = `/api/analytics/export?range=${encodeURIComponent(currentAnalyticsRange)}`;
+    }
 }
 
 function generateLocalAnalyticsData(range) {
