@@ -183,7 +183,7 @@ async def upload_dash(request: Request, file: UploadFile = File(...)):
         )
     try:
         content = await _read_limited(file)
-        text = content.decode("utf-8")
+        text = content.decode("utf-8-sig")
         events = await asyncio.to_thread(analyze_logs, text)
         summary = await asyncio.to_thread(summarize, events)
     except HTTPException as exc:
@@ -210,9 +210,12 @@ async def api_analyze_network_logs(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted for network analysis")
     try:
         content = await _read_limited(file)
-        text = content.decode("utf-8")
+        text = content.decode("utf-8-sig")
+        # Count non-empty data rows (minus header)
+        lines = [line for line in text.splitlines() if line.strip()]
+        total_rows = max(0, len(lines) - 1)
         events = await asyncio.to_thread(analyze_logs, text)
-        summary = await asyncio.to_thread(summarize, events)
+        summary = await asyncio.to_thread(summarize, events, total_rows)
         return {"events": events, "summary": summary}
     except HTTPException:
         raise

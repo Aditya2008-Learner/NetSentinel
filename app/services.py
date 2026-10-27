@@ -111,8 +111,25 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
         rule_id, observed_value_num, threshold_num, observed_label, and recommended_action.
     """
     events: List[Dict[str, object]] = []
-    reader = csv.DictReader(csv_text.splitlines())
+    
+    # Use io.StringIO with utf-8-sig or standard newline handling
+    import io
+    f = io.StringIO(csv_text)
+    reader = csv.DictReader(f)
+    
+    # Clean fieldnames (strip whitespace and BOM)
+    if reader.fieldnames:
+        reader.fieldnames = [fn.strip().lstrip('\ufeff').replace('\ufeff', '') for fn in reader.fieldnames]
 
+    if not reader.fieldnames or not all(h in [fn.strip() for fn in reader.fieldnames] for h in ["timestamp", "src_ip", "dst_ip"]):
+        raise ValueError("Invalid CSV headers. Required columns: timestamp, src_ip, dst_ip")
+
+    # Read rows
+    rows = list(reader)
+    if not rows and not reader.fieldnames:
+        raise ValueError("CSV file is empty or contains no valid data rows.")
+
+    row_count = 0
     src_counts: Dict[Tuple[str, datetime], int] = defaultdict(int)
     dst_counts: Dict[Tuple[str, datetime], int] = defaultdict(int)
     ports_seen: Dict[Tuple[str, str, datetime], Set[int]] = defaultdict(set)
@@ -150,11 +167,9 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
             }
         )
 
-    if not reader.fieldnames or not all(h in reader.fieldnames for h in ["timestamp", "src_ip", "dst_ip"]):
-        raise ValueError("Invalid CSV headers. Required columns: timestamp, src_ip, dst_ip")
-
-    for row_idx, row in enumerate(reader, start=1):
-        ts_raw = row.get("timestamp", "")
+    for row_idx, row in enumerate(rows, start=1):
+        row_count += 1
+        ts_raw = (row.get("timestamp") or "").strip()
         if not ts_raw:
             raise ValueError(f"Row {row_idx}: Missing timestamp value")
         try:
@@ -263,10 +278,13 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
                 reason=f"Large transfer ({megabytes:.1f} MB in one flow)",
             )
 
+    if row_count == 0:
+        raise ValueError("CSV file contains no data rows to analyze.")
+
     return events
 
 
-def summarize(events: List[Dict[str, str]]) -> Dict[str, object]:
+def summarize(events: List[Dict[str, str]], total_rows: int = 0) -> Dict[str, object]:
     """Count events and unique hosts for the dashboard header."""
     by_severity = {"high": 0, "medium": 0, "low": 0}
     sources: Set[str] = set()
@@ -280,6 +298,7 @@ def summarize(events: List[Dict[str, str]]) -> Dict[str, object]:
             destinations.add(str(event["dst_ip"]))
     return {
         "total": len(events),
+        "total_records_analyzed": total_rows,
         "by_severity": by_severity,
         "unique_sources": len(sources),
         "unique_destinations": len(destinations),

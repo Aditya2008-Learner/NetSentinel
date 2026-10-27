@@ -126,3 +126,31 @@ def test_telemetry_simulation_idempotent():
 def test_telemetry_invalid_scenario_rejected():
     response = client.post("/api/telemetry/simulate", data={"scenario": "ddos"})
     assert response.status_code == 400
+
+
+def test_csv_upload_with_whitespace_and_bom(tmp_path):
+    """CSV headers with whitespace and UTF-8 BOM must be parsed correctly."""
+    csv_path = tmp_path / "spaced.csv"
+    csv_path.write_bytes(
+        b"\xef\xbb\xbf-timestamp, src_ip, dst_ip\n".replace(b"-", b"") +
+        b"2023-10-01T12:00:00, 192.168.1.10, 10.0.0.5\n"
+    )
+    with open(csv_path, "rb") as fp:
+        files = {"file": ("spaced.csv", fp, "text/csv")}
+        response = client.post("/api/network/analyze", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert "events" in data
+    assert "summary" in data
+    assert data["summary"]["total_records_analyzed"] == 1
+
+
+def test_csv_upload_missing_columns(tmp_path):
+    """CSV missing required columns must return 400."""
+    csv_path = tmp_path / "bad.csv"
+    csv_path.write_text("time,ip1,ip2\n2023-10-01,1.1.1.1,2.2.2.2\n")
+    with open(csv_path, "rb") as fp:
+        files = {"file": ("bad.csv", fp, "text/csv")}
+        response = client.post("/api/network/analyze", files=files)
+    assert response.status_code == 400
+    assert "Required columns" in response.json()["detail"]

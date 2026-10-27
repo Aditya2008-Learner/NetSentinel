@@ -435,18 +435,28 @@ async function loadNetworkResults(data) {
     `;
 
     const tbody = document.querySelector("#network-events-table tbody");
-    tbody.innerHTML = data.events.map(e => `
-        <tr>
-            <td>${e.timestamp}</td>
-            <td><span class="badge badge-${e.severity}">${e.severity}</span></td>
-            <td><code>${e.rule_id}</code></td>
-            <td><code>${e.src_ip}</code></td>
-            <td><code>${e.dst_ip}</code></td>
-            <td>${e.observed_label}</td>
-            <td>${e.recommended_action}</td>
-        </tr>
-    `).join("");
-}
+    if (data.events && data.events.length > 0) {
+        tbody.innerHTML = data.events.map(e => `
+            <tr>
+                <td>${e.timestamp}</td>
+                <td><span class="badge badge-${e.severity}">${e.severity}</span></td>
+                <td><code>${e.rule_id}</code></td>
+                <td><code>${e.src_ip}</code></td>
+                <td><code>${e.dst_ip}</code></td>
+                <td>${e.observed_label}</td>
+                <td>${e.recommended_action}</td>
+            </tr>
+        `).join("");
+    } else {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                    No suspicious events detected across ${summary.total_records_analyzed || summary.total || 0} analyzed records.
+                    All network traffic is within normal heuristic thresholds.
+                </td>
+            </tr>
+        `;
+    }
 
 // Investigation management
 function loadInvestigations() {
@@ -481,18 +491,48 @@ function initForms() {
     // Network Analysis Form
     const netForm = document.getElementById("network-upload-form");
     if (netForm) {
+        let submitCount = 0;
         netForm.addEventListener("submit", async (e) => {
             e.preventDefault();
             const fileInput = document.getElementById("log-file-input");
             const formData = new FormData();
             formData.append("file", fileInput.files[0]);
+            
+            // Get and disable the submit button
+            const analyzeBtn = netForm.querySelector('button[type="submit"]');
+            if (!analyzeBtn) return;
+            const originalText = analyzeBtn.textContent || "Analyze Traffic Logs";
+            analyzeBtn.setAttribute("disabled", "true");
+            analyzeBtn.textContent = "Analyzing...";
+
+            // Prevent duplicate submissions
+            if (submitCount > 0) {
+                showNotification("Analysis already in progress. Please wait for results.", "error");
+                analyzeBtn.removeAttribute("disabled");
+                analyzeBtn.textContent = originalText;
+                submitCount--;
+                return;
+            }
+            submitCount++;
 
             try {
                 const res = await fetch("/api/network/analyze", {
                     method: "POST",
                     body: formData
                 });
-                const data = await res.json();
+                let data;
+                try {
+                    data = await res.json();
+                } catch (_) {
+                    // Non-JSON response
+                    const txt = await res.text();
+                    showNotification("Server returned invalid data (status " + res.status + ")", "error");
+                    analyzeBtn.removeAttribute("disabled");
+                    analyzeBtn.textContent = originalText;
+                    submitCount--;
+                    return;
+                }
+
                 if (res.ok) {
                     loadNetworkResults(data);
                 } else {
@@ -500,6 +540,10 @@ function initForms() {
                 }
             } catch (err) {
                 showNetworkError();
+            } finally {
+                analyzeBtn.removeAttribute("disabled");
+                analyzeBtn.textContent = originalText;
+                submitCount--;
             }
         });
     }
