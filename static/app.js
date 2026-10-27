@@ -5,27 +5,13 @@ let latestTelemetryData = null;
 let localSimulationActive = false;
 let localActiveScenario = null;
 
-// Font loading indicator
 document.addEventListener("DOMContentLoaded", () => {
-    initFontFaceSupport();
     initNavigation();
     loadOverviewData();
     loadInvestigations();
     initForms();
     initTelemetryChart();
 });
-
-// Support JetBrains Mono font rendering
-function initFontFaceSupport() {
-    const style = document.createElement('style');
-    style.textContent = `
-        @font-face {
-            font-family: 'Cyber Mono';
-            src: local('JetBrains Mono');
-        }
-    `;
-    document.head.appendChild(style);
-}
 
 // Initialize navigation with smooth transitions
 function initNavigation() {
@@ -323,7 +309,7 @@ async function triggerAttackSimulation() {
     }
 
     loadTelemetryGraph();
-    renderNetworkResults({ 
+    loadNetworkResults({ 
         events: simulatedEvents, 
         summary: { total: simulatedEvents.length, by_severity: { high: 1, medium: 0, low: 0 } } 
     });
@@ -347,6 +333,25 @@ async function resetAttackSimulation() {
     }
 
     loadTelemetryGraph();
+}
+
+// Toggle live telemetry polling on/off
+function toggleTelemetryLive() {
+    const btn = document.getElementById("telemetry-toggle-btn");
+    if (telemetryPaused) {
+        // Resume live updates
+        telemetryPaused = false;
+        telemetryLiveInterval = setInterval(loadTelemetryGraph, 5000);
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+    } else {
+        // Pause live updates
+        telemetryPaused = true;
+        if (telemetryLiveInterval) {
+            clearInterval(telemetryLiveInterval);
+            telemetryLiveInterval = null;
+        }
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-play"></i> Resume';
+    }
 }
 
 // Initialize telemetry chart and live updates
@@ -430,7 +435,7 @@ function initForms() {
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    renderNetworkResults(data);
+                    loadNetworkResults(data);
                 } else {
                     showNotification(data.detail || "Analysis failed", "error");
                 }
