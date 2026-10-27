@@ -155,7 +155,12 @@ async def healthz():
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_spa(request: Request):
     """Serve the single-page Net Sentinel security dashboard."""
-    return templates.TemplateResponse(request, "index.html", {})
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {},
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @app.get("/api/overview")
