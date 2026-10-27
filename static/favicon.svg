@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+    <rect width="64" height="64" rx="16" fill="#090d16"/>
+    <rect x="1" y="1" width="62" height="62" rx="15" stroke="#26354f" stroke-width="2"/>
+    <!-- Security Shield -->
+    <path d="M32 10L48 16V29C48 40.5 41.2 50.8 32 54C22.8 50.8 16 40.5 16 29V16L32 10Z" fill="url(#shieldGrad)" stroke="#10b981" stroke-width="2"/>
+    <!-- Central Sentinel Node / Radar Pulse -->
+    <circle cx="32" cy="30" r="5" fill="#38bdf8"/>
+    <path d="M32 21V25M32 35V39M23 30H27M37 30H41" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+    <defs>
+        <linearGradient id="shieldGrad" x1="16" y1="10" x2="48" y2="54" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#151f34"/>
+            <stop offset="100%" stop-color="#0b1120"/>
+        </linearGradient>
+    </defs>
+</svg>
