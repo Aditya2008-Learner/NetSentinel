@@ -8,6 +8,12 @@ from typing import Dict, Tuple, Optional
 Image.MAX_IMAGE_PIXELS = 25_000_000
 
 
+def _get_pixel_tuples(img: Image.Image):
+    if hasattr(img, "get_flattened_data"):
+        return list(img.get_flattened_data())
+    return list(img.getdata())
+
+
 def calculate_sha256(file_bytes: bytes) -> str:
     return hashlib.sha256(file_bytes).hexdigest()
 
@@ -31,7 +37,7 @@ def embed_secret_in_image(image_path: str, secret_text: str, output_path: str) -
             # Convert payload to binary string
             binary_payload = "".join(format(byte, "08b") for byte in payload)
             
-            pixels = list(rgb_img.getdata())
+            pixels = _get_pixel_tuples(rgb_img)
             new_pixels = []
             data_index = 0
             data_len = len(binary_payload)
@@ -62,7 +68,7 @@ def extract_secret_from_image(image_path: str) -> Tuple[bool, str]:
     try:
         with Image.open(image_path) as img:
             rgb_img = img.convert("RGB")
-            pixels = list(rgb_img.getdata())
+            pixels = _get_pixel_tuples(rgb_img)
 
             binary_data = []
             for pixel in pixels:
@@ -108,7 +114,7 @@ def analyze_image_forensics(image_path: str, file_bytes: bytes) -> Dict[str, obj
             rgb_img = img.convert("RGB")
             lsb_count = 0
             total_samples = 0
-            for pixel in rgb_img.getdata():
+            for pixel in _get_pixel_tuples(rgb_img):
                 r, g, b = pixel
                 if (r & 1) ^ (g & 1) ^ (b & 1):
                     lsb_count += 1

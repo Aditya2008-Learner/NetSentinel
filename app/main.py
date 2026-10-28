@@ -6,6 +6,7 @@ Network Intelligence. Threat Detection. Digital Forensics.
 import asyncio
 import base64
 import io
+import json
 import logging
 import os
 import pathlib
@@ -86,7 +87,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -121,13 +122,15 @@ async def _log_requests(request: Request, call_next):
     return response
 
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
+BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+TEMPLATES_DIR = BASE_DIR / "templates"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
     UPLOAD_DIR = pathlib.Path("/tmp/uploads")
 else:
-    UPLOAD_DIR = pathlib.Path("data/uploads")
+    UPLOAD_DIR = BASE_DIR / "data" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -227,8 +230,10 @@ async def upload_dash(request: Request, file: UploadFile = File(...)):
             text = content.decode("utf-8-sig")
         except UnicodeDecodeError:
             raise HTTPException(status_code=400, detail="CSV file encoding must be valid UTF-8")
+        lines = [line for line in text.splitlines() if line.strip()]
+        total_rows = max(0, len(lines) - 1)
         events = await asyncio.to_thread(analyze_logs, text)
-        summary = await asyncio.to_thread(summarize, events)
+        summary = await asyncio.to_thread(summarize, events, getattr(events, "total_rows", total_rows))
     except HTTPException as exc:
         return templates.TemplateResponse(
             request,
@@ -265,7 +270,31 @@ async def api_analyze_network_logs(file: UploadFile = File(...)):
         lines = [line for line in text.splitlines() if line.strip()]
         total_rows = max(0, len(lines) - 1)
         events = await asyncio.to_thread(analyze_logs, text)
+        total_rows = getattr(events, "total_rows", total_rows)
         summary = await asyncio.to_thread(summarize, events, total_rows)
+        safe_name = _sanitize_filename(file.filename)
+        threat_count = summary.get("total_threats", summary.get("total", 0))
+        threat_breakdown = summary.get("breakdown", summary.get("by_severity", {}))
+        summary.setdefault("total_threats", threat_count)
+        summary.setdefault("breakdown", threat_breakdown)
+        details_str = json.dumps({
+            "total_records": total_rows,
+            "threat_count": summary.get("total_threats", 0),
+            "threat_breakdown": summary.get("breakdown", {}),
+        })
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO analysis_history (filename, operation_type, status, details, timestamp)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (safe_name, "Network Log Analysis", "Completed", details_str),
+            )
+            conn.commit()
+        finally:
+            conn.close()
         return {"events": events, "summary": summary}
     except HTTPException:
         raise
@@ -273,6 +302,35 @@ async def api_analyze_network_logs(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(err))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/network/history")
+async def api_get_network_history(limit: int = 20):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM analysis_history ORDER BY id DESC LIMIT ?", (limit,))
+        records = []
+        for row in cursor.fetchall():
+            item = dict(row)
+            if item.get("details"):
+                try:
+                    item["details"] = json.loads(item["details"])
+                except (ValueError, TypeError):
+                    pass
+            records.append(item)
+    finally:
+        conn.close()
+    return records
+
+
+@app.get("/api/network/sample")
+async def api_get_sample_csv():
+    """Return sample network connection logs for testing."""
+    sample_path = BASE_DIR / "data" / "sample.csv"
+    if not sample_path.is_file():
+        raise HTTPException(status_code=404, detail="Sample data not found")
+    return FileResponse(sample_path, media_type="text/csv", filename="sample.csv")
 
 
 # --- Investigations API ---
@@ -315,6 +373,165 @@ async def api_create_investigation(
     finally:
         conn.close()
     return {"id": inv_id, "title": clean_title, "status": "Open", "message": "Investigation created successfully"}
+
+
+@app.get("/api/devices")
+async def api_get_devices():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM devices ORDER BY last_seen DESC")
+        devices = [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+    return devices
+
+
+@app.post("/api/devices")
+async def api_create_device(
+    hostname: str = Form(...),
+    ip_address: str = Form(...),
+    mac_address: Optional[str] = Form(None),
+    status: Optional[str] = Form("Active"),
+    observation_source: Optional[str] = Form("Manual Entry"),
+):
+    clean_hostname = (hostname or "").strip()
+    clean_ip = (ip_address or "").strip()
+    clean_mac = (mac_address or "").strip() if mac_address else None
+    clean_status = (status or "").strip() or "Active"
+    clean_source = (observation_source or "").strip() or "Manual Entry"
+
+    if not clean_hostname:
+        raise HTTPException(status_code=400, detail="Hostname cannot be empty")
+    if not clean_ip:
+        raise HTTPException(status_code=400, detail="IP address cannot be empty")
+    if len(clean_hostname) > 255:
+        raise HTTPException(status_code=400, detail="Hostname too long (max 255 characters)")
+    if len(clean_ip) > 100:
+        raise HTTPException(status_code=400, detail="IP address too long (max 100 characters)")
+    if clean_mac and len(clean_mac) > 100:
+        raise HTTPException(status_code=400, detail="MAC address too long (max 100 characters)")
+    if len(clean_status) > 50:
+        raise HTTPException(status_code=400, detail="Status too long (max 50 characters)")
+    if len(clean_source) > 100:
+        raise HTTPException(status_code=400, detail="Observation source too long (max 100 characters)")
+
+    device_id = f"DEV-{int(datetime.utcnow().timestamp())}-{uuid.uuid4().hex[:4]}"
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO devices (id, ip_address, mac_address, hostname, status, observation_source, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            (device_id, clean_ip, clean_mac, clean_hostname, clean_status, clean_source),
+        )
+        conn.commit()
+        cursor.execute("SELECT * FROM devices WHERE id = ?", (device_id,))
+        created_device = dict(cursor.fetchone())
+    finally:
+        conn.close()
+    return created_device
+
+
+@app.delete("/api/devices/{device_id}")
+async def api_delete_device(device_id: str):
+    clean_id = (device_id or "").strip()
+    if not clean_id:
+        raise HTTPException(status_code=404, detail="Device not found")
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM devices WHERE id = ?", (clean_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Device not found")
+        cursor.execute("DELETE FROM devices WHERE id = ?", (clean_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"success": True, "message": "Device removed successfully"}
+
+
+@app.get("/api/search")
+async def api_search(q: str = Query("", alias="q")):
+    clean_q = (q or "").strip()
+    if not clean_q:
+        return {
+            "query": clean_q,
+            "total_results": 0,
+            "results": {
+                "investigations": [],
+                "devices": [],
+                "integrity_baselines": [],
+                "analysis_history": [],
+            },
+        }
+
+    pattern = f"%{clean_q}%"
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT * FROM investigations
+            WHERE title LIKE ? OR description LIKE ? OR case_ref LIKE ? OR findings_summary LIKE ?
+            ORDER BY created_at DESC
+            """,
+            (pattern, pattern, pattern, pattern),
+        )
+        investigations = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute(
+            """
+            SELECT * FROM devices
+            WHERE hostname LIKE ? OR ip_address LIKE ? OR mac_address LIKE ? OR observation_source LIKE ?
+            ORDER BY last_seen DESC
+            """,
+            (pattern, pattern, pattern, pattern),
+        )
+        devices = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute(
+            """
+            SELECT * FROM integrity_baselines
+            WHERE filename LIKE ? OR sha256 LIKE ? OR notes LIKE ?
+            ORDER BY recorded_at DESC
+            """,
+            (pattern, pattern, pattern),
+        )
+        integrity_baselines = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute(
+            """
+            SELECT * FROM analysis_history
+            WHERE filename LIKE ? OR operation_type LIKE ? OR details LIKE ?
+            ORDER BY id DESC
+            """,
+            (pattern, pattern, pattern),
+        )
+        analysis_history = [dict(row) for row in cursor.fetchall()]
+
+        total_results = (
+            len(investigations)
+            + len(devices)
+            + len(integrity_baselines)
+            + len(analysis_history)
+        )
+
+        return {
+            "query": clean_q,
+            "total_results": total_results,
+            "results": {
+                "investigations": investigations,
+                "devices": devices,
+                "integrity_baselines": integrity_baselines,
+                "analysis_history": analysis_history,
+            },
+        }
+    finally:
+        conn.close()
 
 
 # --- Steganography Lab API ---

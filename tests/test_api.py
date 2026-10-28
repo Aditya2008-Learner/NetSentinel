@@ -375,3 +375,214 @@ def test_csv_non_csv_extension_returns_400():
     assert res.status_code == 400
     assert "Only CSV files are accepted" in res.json()["detail"]
 
+
+def test_sample_csv_endpoint():
+    response = client.get("/api/network/sample")
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+    assert "timestamp" in response.text
+
+
+def test_api_get_sample_csv():
+    response = client.get("/api/network/sample")
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+    first_line = response.text.splitlines()[0]
+    for col in ("timestamp", "src_ip", "dst_ip"):
+        assert col in first_line
+
+
+def test_csv_with_trailing_blank_lines(tmp_path):
+    csv_path = tmp_path / "trailing_blank_lines.csv"
+    csv_path.write_text(
+        "timestamp,src_ip,dst_ip\n"
+        "2023-10-01T12:00:00,192.168.1.10,10.0.0.5\n"
+        "\n"
+        "2023-10-01T12:00:01,192.168.1.10,10.0.0.5\n"
+        "\n\n"
+    )
+    with open(csv_path, "rb") as fp:
+        files = {"file": ("trailing_blank_lines.csv", fp, "text/csv")}
+        response = client.post("/api/network/analyze", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["total_records_analyzed"] == 2
+
+
+def test_csv_with_ip_port_suffixes(tmp_path):
+    csv_path = tmp_path / "ip_ports.csv"
+    csv_path.write_text(
+        "timestamp,src_ip,dst_ip,src_port,dst_port,protocol,bytes\n"
+        "2023-10-01T12:00:00,192.168.1.10:8080,10.0.0.5:443,10000,443,TCP,15728640\n"
+    )
+    with open(csv_path, "rb") as fp:
+        files = {"file": ("ip_ports.csv", fp, "text/csv")}
+        response = client.post("/api/network/analyze", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["total_records_analyzed"] == 1
+    assert len(data["events"]) == 1
+    assert data["events"][0]["src_ip"] == "192.168.1.10"
+    assert data["events"][0]["dst_ip"] == "10.0.0.5"
+
+
+def test_csv_upload_with_trailing_blank_lines(tmp_path):
+    csv_path = tmp_path / "trailing_blank.csv"
+    csv_path.write_text(
+        "timestamp,src_ip,dst_ip\n"
+        "2023-10-01T12:00:00,192.168.1.10:8080,10.0.0.5:443\n"
+        "\n"
+        "2023-10-01T12:00:01,192.168.1.10,10.0.0.5\n"
+        "\n\n"
+    )
+    with open(csv_path, "rb") as fp:
+        files = {"file": ("trailing_blank.csv", fp, "text/csv")}
+        response = client.post("/api/network/analyze", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["total_records_analyzed"] == 2
+
+
+def test_anchored_paths():
+    from app.database import DB_PATH, BASE_DIR as DB_BASE_DIR
+    from app.main import BASE_DIR, STATIC_DIR, TEMPLATES_DIR, UPLOAD_DIR
+    assert DB_BASE_DIR.is_dir()
+    assert BASE_DIR.is_dir()
+    assert STATIC_DIR == BASE_DIR / "static"
+    assert TEMPLATES_DIR == BASE_DIR / "templates"
+    if not (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")):
+        assert DB_PATH == DB_BASE_DIR / "data" / "netsentinel.db"
+        assert UPLOAD_DIR == BASE_DIR / "data" / "uploads"
+
+
+def test_seed_devices_on_empty_db(tmp_path):
+    import sqlite3
+    from app.database import init_db_conn
+    db_file = tmp_path / "seed_test.db"
+    conn = sqlite3.connect(db_file)
+    conn.row_factory = sqlite3.Row
+    init_db_conn(conn)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM devices ORDER BY id ASC")
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    assert len(rows) == 2
+    dev1 = rows[0]
+    assert dev1["id"] == "DEV-001"
+    assert dev1["ip_address"] == "192.168.1.1"
+    assert dev1["mac_address"] == "a1:b2:c3:d4:e5:f6"
+    assert dev1["hostname"] == "Local Gateway"
+    assert dev1["status"] == "Active"
+    assert dev1["observation_source"] == "ARP Cache / Gateway"
+    assert dev1["first_seen"] is not None
+    assert dev1["last_seen"] is not None
+    dev2 = rows[1]
+    assert dev2["id"] == "DEV-002"
+    assert dev2["ip_address"] == "192.168.1.50"
+    assert dev2["mac_address"] == "f6:e5:d4:c3:b2:a1"
+    assert dev2["hostname"] == "Analysis Node"
+    assert dev2["status"] == "Active"
+    assert dev2["observation_source"] == "Local Interface"
+
+
+def test_api_devices_crud():
+    get_res = client.get("/api/devices")
+    assert get_res.status_code == 200
+    devices = get_res.json()
+    assert isinstance(devices, list)
+
+    bad_res1 = client.post("/api/devices", data={"hostname": "   ", "ip_address": "10.0.0.1"})
+    assert bad_res1.status_code == 400
+    assert "Hostname cannot be empty" in bad_res1.json()["detail"]
+
+    bad_res2 = client.post("/api/devices", data={"hostname": "Server", "ip_address": "   "})
+    assert bad_res2.status_code == 400
+    assert "IP address cannot be empty" in bad_res2.json()["detail"]
+
+    create_res = client.post(
+        "/api/devices",
+        data={
+            "hostname": "Threat Sensor Alpha",
+            "ip_address": "10.10.10.25",
+            "mac_address": "00:11:22:33:44:55",
+            "status": "Active",
+            "observation_source": "Manual Entry",
+        },
+    )
+    assert create_res.status_code == 200
+    created = create_res.json()
+    assert created["id"].startswith("DEV-")
+    assert created["hostname"] == "Threat Sensor Alpha"
+    assert created["ip_address"] == "10.10.10.25"
+    assert created["mac_address"] == "00:11:22:33:44:55"
+    assert created["status"] == "Active"
+    assert created["observation_source"] == "Manual Entry"
+    assert created["first_seen"] is not None
+    assert created["last_seen"] is not None
+
+    del_res = client.delete(f"/api/devices/{created['id']}")
+    assert del_res.status_code == 200
+    assert del_res.json()["success"] is True
+
+    del_missing = client.delete(f"/api/devices/{created['id']}")
+    assert del_missing.status_code == 404
+    assert del_missing.json()["detail"] == "Device not found"
+
+
+def test_api_network_history_and_analysis_persistence():
+    csv_content = (
+        "timestamp,src_ip,dst_ip,src_port,dst_port,protocol,bytes\n"
+        "2023-10-01T12:00:00,192.168.1.100,10.0.0.5,10000,80,TCP,500\n"
+    )
+    res = client.post(
+        "/api/network/analyze",
+        files={"file": ("history_test_file.csv", csv_content.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 200
+
+    hist_res = client.get("/api/network/history?limit=10")
+    assert hist_res.status_code == 200
+    history = hist_res.json()
+    assert isinstance(history, list)
+    assert len(history) > 0
+
+    latest = history[0]
+    assert latest["filename"] == "history_test_file.csv"
+    assert latest["operation_type"] == "Network Log Analysis"
+    assert latest["status"] == "Completed"
+    assert isinstance(latest["details"], dict)
+    assert "total_records" in latest["details"]
+    assert "threat_count" in latest["details"]
+    assert "threat_breakdown" in latest["details"]
+    assert latest["details"]["total_records"] == 1
+
+
+def test_api_global_search():
+    empty_res = client.get("/api/search?q=")
+    assert empty_res.status_code == 200
+    empty_data = empty_res.json()
+    assert empty_data["query"] == ""
+    assert empty_data["total_results"] == 0
+    assert empty_data["results"]["investigations"] == []
+    assert empty_data["results"]["devices"] == []
+    assert empty_data["results"]["integrity_baselines"] == []
+    assert empty_data["results"]["analysis_history"] == []
+
+    client.post("/api/investigations", data={"title": "UniqueSearchTitle99", "case_ref": "REF-SRCH"})
+
+    search_res = client.get("/api/search?q=uniquesearchtitle99")
+    assert search_res.status_code == 200
+    data = search_res.json()
+    assert data["query"] == "uniquesearchtitle99"
+    assert data["total_results"] >= 1
+    found_titles = [inv["title"] for inv in data["results"]["investigations"]]
+    assert "UniqueSearchTitle99" in found_titles
+
+    dev_search = client.get("/api/search?q=192.168.1.1")
+    assert dev_search.status_code == 200
+    dev_data = dev_search.json()
+    assert dev_data["total_results"] >= 1
+    found_ips = [d["ip_address"] for d in dev_data["results"]["devices"]]
+    assert "192.168.1.1" in found_ips
+
+

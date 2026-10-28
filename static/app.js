@@ -4,6 +4,7 @@ let telemetryPaused = false;
 let latestTelemetryData = null;
 let localSimulationActive = false;
 let localActiveScenario = null;
+let stagedLogFile = null;
 
 // Sequence counter: incremented on every fetch so stale responses are discarded.
 let _telemetrySeq = 0;
@@ -29,8 +30,11 @@ document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     loadOverviewData();
     loadInvestigations();
+    loadDevices();
+    loadAnalysisHistory();
     initForms();
     initTelemetryChart();
+    initGlobalSearch();
 });
 
 // Pause polling when the tab is hidden; resume when visible again.
@@ -105,6 +109,10 @@ function switchView(targetId) {
             setTimeout(renderTelemetryChart, 350);
         } else if (targetId === "analytics-view") {
             setTimeout(() => loadAnalyticsData(currentAnalyticsRange), 350);
+        } else if (targetId === "devices-view") {
+            loadDevices();
+        } else if (targetId === "network-view") {
+            loadAnalysisHistory();
         }
 }
 
@@ -300,6 +308,7 @@ async function loadTelemetryGraph() {
 
     const rangeElem = document.getElementById("telemetry-range");
     const range = rangeElem ? rangeElem.value : "1h";
+    updateTelemetryTimeAxis(range);
     const seq = ++_telemetrySeq;
 
     try {
@@ -437,47 +446,131 @@ function toggleTelemetryLive() {
 
 // Initialize telemetry chart and start the single polling loop.
 function initTelemetryChart() {
+    const rangeElem = document.getElementById("telemetry-range");
+    if (rangeElem) {
+        rangeElem.addEventListener("change", (e) => {
+            updateTelemetryTimeAxis(e.target.value);
+        });
+    }
     loadTelemetryGraph();
     _startTelemetryInterval();
     window.addEventListener("resize", renderTelemetryChart);
 }
 
 // --- Network Log Analysis ---
+function renderLogFilePreview(file) {
+    const selectedDisplay = document.getElementById("selected-file-display");
+    if (!file || !selectedDisplay) return;
+    selectedDisplay.style.display = "block";
+    const sizeKb = (file.size / 1024).toFixed(1);
+    selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)`;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const text = e.target && e.target.result;
+        if (typeof text === "string" && text.trim()) {
+            const firstLine = text.trim().split("\n")[0].trim().replace(/^\ufeff/, "");
+            if (firstLine) {
+                const delim = (firstLine.includes(";") && !firstLine.includes(",")) ? ";" : (firstLine.includes("\t") && !firstLine.includes(",")) ? "\t" : ",";
+                const cols = firstLine.split(delim).map(c => c.trim().toLowerCase().replace(/[-"'\s]/g, "_"));
+                
+                const hasTime = cols.some(c => ["timestamp", "time", "datetime", "date", "ts", "@timestamp"].includes(c));
+                const hasSrc = cols.some(c => ["src_ip", "srcip", "source_ip", "sourceip", "source", "src", "src_addr", "source_address"].includes(c));
+                const hasDst = cols.some(c => ["dst_ip", "dstip", "destination_ip", "destinationip", "dest_ip", "destip", "destination", "dest", "dst", "dst_addr", "destination_address"].includes(c));
+                
+                let statusBadge = "";
+                if (hasTime && hasSrc && hasDst) {
+                    statusBadge = `<span style="color: var(--accent-emerald); font-weight: 600;">✅ Required telemetry columns verified</span>`;
+                } else {
+                    const missing = [];
+                    if (!hasTime) missing.push("timestamp");
+                    if (!hasSrc) missing.push("src_ip");
+                    if (!hasDst) missing.push("dst_ip");
+                    statusBadge = `<span style="color: var(--accent-amber); font-weight: 500;">⚠️ Notice: Missing expected column(s): ${missing.join(", ")}</span>`;
+                }
+                selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)<br>${statusBadge}<br><span style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.9;">Header: ${escapeHtml(firstLine)}</span>`;
+            }
+        } else if (!text || !text.trim()) {
+            selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (0 KB)<br><span style="color: var(--accent-rose);">⚠️ File is empty</span>`;
+        }
+    };
+    reader.readAsText(file.slice(0, 4096));
+}
+
+async function loadSampleCsv() {
+    try {
+        const res = await fetch("/api/network/sample");
+        if (!res.ok) throw new Error("Could not load sample CSV");
+        const text = await res.text();
+        const blob = new Blob([text], { type: "text/csv" });
+        const file = new File([blob], "sample.csv", { type: "text/csv" });
+        stagedLogFile = file;
+        const logFileInput = document.getElementById("log-file-input");
+        if (logFileInput) {
+            try {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                logFileInput.files = dt.files;
+            } catch (_) {}
+        }
+        renderLogFilePreview(file);
+        showNotification("Sample network log loaded. Click 'Analyze Traffic Logs' to run detection.", "success");
+    } catch (err) {
+        showNotification("Failed to load sample CSV: " + err.message, "error");
+    }
+}
+window.loadSampleCsv = loadSampleCsv;
+
 async function loadNetworkResults(data) {
     const container = document.getElementById("network-results-container");
-    container.classList.remove("hidden");
+    if (container) container.classList.remove("hidden");
 
-    const summary = data.summary;
+    const summary = data?.summary || {};
+    const recordsAnalyzed = summary?.total_records_analyzed ?? 0;
+    const totalEvents = summary?.total ?? (data?.events ? data.events.length : 0);
+    const highSev = summary?.by_severity?.high ?? 0;
+    const mediumSev = summary?.by_severity?.medium ?? 0;
+    const lowSev = summary?.by_severity?.low ?? 0;
+
     const pills = document.getElementById("network-summary-stats");
-    pills.innerHTML = `
-        <span class="badge badge-info">Total Events: ${summary.total}</span>
-        <span class="badge badge-danger">High Severity: ${summary.by_severity.high}</span>
-        <span class="badge badge-warning">Medium Severity: ${summary.by_severity.medium}</span>
-        <span class="badge badge-success">Low Severity: ${summary.by_severity.low}</span>
-    `;
+    if (pills) {
+        pills.innerHTML = `
+            <span class="badge badge-info">Analyzed: ${recordsAnalyzed} records</span>
+            <span class="badge badge-info">Total Events: ${totalEvents}</span>
+            <span class="badge badge-danger">High Severity: ${highSev}</span>
+            <span class="badge badge-warning">Medium Severity: ${mediumSev}</span>
+            <span class="badge badge-success">Low Severity: ${lowSev}</span>
+        `;
+    }
 
     const tbody = document.querySelector("#network-events-table tbody");
-    if (data.events && data.events.length > 0) {
-        tbody.innerHTML = data.events.map(e => `
-            <tr>
-                <td>${escapeHtml(e.timestamp)}</td>
-                <td><span class="badge badge-${escapeHtml(e.severity)}">${escapeHtml(e.severity)}</span></td>
-                <td><code>${escapeHtml(e.rule_id)}</code></td>
-                <td><code>${escapeHtml(e.src_ip)}</code></td>
-                <td><code>${escapeHtml(e.dst_ip)}</code></td>
-                <td>${escapeHtml(e.observed_label)}</td>
-                <td>${escapeHtml(e.recommended_action)}</td>
-            </tr>
-        `).join("");
-    } else {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">
-                    No suspicious events detected across ${escapeHtml(summary.total_records_analyzed || summary.total || 0)} analyzed records.
-                    All network traffic is within normal heuristic thresholds.
-                </td>
-            </tr>
-        `;
+    if (tbody) {
+        if (data && data.events && data.events.length > 0) {
+            tbody.innerHTML = data.events.map(e => {
+                const sev = (e.severity || "low").toLowerCase();
+                const badgeClass = sev === "high" || sev === "danger" ? "badge-danger" : sev === "medium" || sev === "warning" ? "badge-warning" : "badge-success";
+                return `
+                    <tr>
+                        <td>${escapeHtml(e.timestamp)}</td>
+                        <td><span class="badge ${badgeClass}">${escapeHtml(e.severity || "low")}</span></td>
+                        <td><code>${escapeHtml(e.rule_id)}</code></td>
+                        <td><code>${escapeHtml(e.src_ip)}</code></td>
+                        <td><code>${escapeHtml(e.dst_ip)}</code></td>
+                        <td>${escapeHtml(e.observed_label)}</td>
+                        <td>${escapeHtml(e.recommended_action)}</td>
+                    </tr>
+                `;
+            }).join("");
+        } else {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                        No suspicious events detected across ${escapeHtml(recordsAnalyzed || totalEvents || 0)} analyzed records.
+                        All network traffic is within normal heuristic thresholds.
+                    </td>
+                </tr>
+            `;
+        }
     }
 }
 
@@ -515,49 +608,6 @@ function initForms() {
     const netForm = document.getElementById("network-upload-form");
     const dropZone = document.getElementById("network-drop-zone") || document.querySelector(".upload-drop-zone");
     const logFileInput = document.getElementById("log-file-input");
-    const selectedDisplay = document.getElementById("selected-file-display");
-
-    let stagedLogFile = null;
-
-    function renderLogFilePreview(file) {
-        if (!file || !selectedDisplay) return;
-        selectedDisplay.style.display = "block";
-        const sizeKb = (file.size / 1024).toFixed(1);
-        selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)`;
-
-        // Safe client-side header inspection using FileReader
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target && e.target.result;
-            if (typeof text === "string" && text.trim()) {
-                const firstLine = text.trim().split("\n")[0].trim().replace(/^\ufeff/, "");
-                if (firstLine) {
-                    // Check for delimiter
-                    const delim = (firstLine.includes(";") && !firstLine.includes(",")) ? ";" : (firstLine.includes("\t") && !firstLine.includes(",")) ? "\t" : ",";
-                    const cols = firstLine.split(delim).map(c => c.trim().toLowerCase().replace(/[-"'\s]/g, "_"));
-                    
-                    const hasTime = cols.some(c => ["timestamp", "time", "datetime", "date", "ts", "@timestamp"].includes(c));
-                    const hasSrc = cols.some(c => ["src_ip", "srcip", "source_ip", "sourceip", "source", "src", "src_addr", "source_address"].includes(c));
-                    const hasDst = cols.some(c => ["dst_ip", "dstip", "destination_ip", "destinationip", "dest_ip", "destip", "destination", "dest", "dst", "dst_addr", "destination_address"].includes(c));
-                    
-                    let statusBadge = "";
-                    if (hasTime && hasSrc && hasDst) {
-                        statusBadge = `<span style="color: var(--accent-emerald); font-weight: 600;">✅ Required telemetry columns verified</span>`;
-                    } else {
-                        const missing = [];
-                        if (!hasTime) missing.push("timestamp");
-                        if (!hasSrc) missing.push("src_ip");
-                        if (!hasDst) missing.push("dst_ip");
-                        statusBadge = `<span style="color: var(--accent-amber); font-weight: 500;">⚠️ Notice: Missing expected column(s): ${missing.join(", ")}</span>`;
-                    }
-                    selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (${sizeKb} KB)<br>${statusBadge}<br><span style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.9;">Header: ${escapeHtml(firstLine)}</span>`;
-                }
-            } else if (!text || !text.trim()) {
-                selectedDisplay.innerHTML = `Selected: <strong>${escapeHtml(file.name)}</strong> (0 KB)<br><span style="color: var(--accent-rose);">⚠️ File is empty</span>`;
-            }
-        };
-        reader.readAsText(file.slice(0, 4096));
-    }
 
     if (dropZone && logFileInput) {
         dropZone.addEventListener("click", () => {
@@ -614,9 +664,14 @@ function initForms() {
     }
 
     if (netForm) {
-        let submitCount = 0;
+        let _isAnalyzing = false;
         netForm.addEventListener("submit", async (e) => {
             e.preventDefault();
+            if (_isAnalyzing) {
+                showNotification("Analysis already in progress. Please wait for results.", "error");
+                return;
+            }
+
             const file = (logFileInput && logFileInput.files && logFileInput.files[0]) || stagedLogFile;
             if (!file) {
                 showNotification("Please select or drop a CSV file to analyze.", "error");
@@ -630,20 +685,12 @@ function initForms() {
             
             // Get and disable the submit button
             const analyzeBtn = netForm.querySelector('button[type="submit"]');
-            if (!analyzeBtn) return;
-            const originalText = analyzeBtn.textContent || "Analyze Traffic Logs";
-            analyzeBtn.setAttribute("disabled", "true");
-            analyzeBtn.textContent = "Analyzing...";
-
-            // Prevent duplicate submissions
-            if (submitCount > 0) {
-                showNotification("Analysis already in progress. Please wait for results.", "error");
-                analyzeBtn.removeAttribute("disabled");
-                analyzeBtn.textContent = originalText;
-                submitCount--;
-                return;
+            const originalText = analyzeBtn ? (analyzeBtn.textContent || "Analyze Traffic Logs") : "Analyze Traffic Logs";
+            _isAnalyzing = true;
+            if (analyzeBtn) {
+                analyzeBtn.setAttribute("disabled", "true");
+                analyzeBtn.textContent = "Analyzing...";
             }
-            submitCount++;
 
             try {
                 // Send FormData directly without manually setting Content-Type (let browser set multipart boundary)
@@ -656,14 +703,15 @@ function initForms() {
                     data = await res.json();
                 } catch (_) {
                     showNotification("Server returned non-JSON response (status " + res.status + ")", "error");
-                    analyzeBtn.removeAttribute("disabled");
-                    analyzeBtn.textContent = originalText;
-                    submitCount--;
                     return;
                 }
 
                 if (res.ok) {
                     loadNetworkResults(data);
+                    loadAnalysisHistory();
+                    showNotification(`Analysis complete: ${data.events.length} suspicious events detected out of ${data.summary && data.summary.total_records_analyzed ? data.summary.total_records_analyzed : data.events.length} records.`, data.events.length > 0 ? "warning" : "success");
+                    const container = document.getElementById("network-results-container");
+                    if (container) container.scrollIntoView({ behavior: "smooth", block: "nearest" });
                 } else {
                     let errorMsg = "Analysis failed";
                     if (data && data.detail) {
@@ -701,9 +749,11 @@ function initForms() {
             } catch (err) {
                 showNetworkError();
             } finally {
-                analyzeBtn.removeAttribute("disabled");
-                analyzeBtn.textContent = originalText;
-                submitCount--;
+                _isAnalyzing = false;
+                if (analyzeBtn) {
+                    analyzeBtn.removeAttribute("disabled");
+                    analyzeBtn.textContent = originalText;
+                }
             }
         });
     }
@@ -742,7 +792,7 @@ function initForms() {
             const file = embedImageInput ? embedImageInput.files[0] : null;
             const secret = document.getElementById("embed-secret").value;
             if (!file) {
-                alert("Please select a cover PNG image.");
+                showNotification("Please select a cover PNG image.", "error");
                 return;
             }
             const formData = new FormData();
@@ -768,7 +818,7 @@ function initForms() {
                     box.innerHTML = `❌ Error: ${escapeHtml(data.detail)}`;
                 }
             } catch (err) {
-                alert("Embedding failed.");
+                showNotification("Embedding failed.", "error");
             }
         });
     }
@@ -778,7 +828,12 @@ function initForms() {
     if (extractForm) {
         extractForm.addEventListener("submit", async (e) => {
             e.preventDefault();
-            const file = document.getElementById("extract-image").files[0];
+            const fileInput = document.getElementById("extract-image");
+            const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+            if (!file) {
+                showNotification("Please select a file first.", "error");
+                return;
+            }
             const formData = new FormData();
             formData.append("file", file);
 
@@ -793,7 +848,7 @@ function initForms() {
                     document.getElementById("extracted-text-output").textContent = data.detail || "Extraction failed.";
                 }
             } catch (err) {
-                alert("Extraction request failed.");
+                showNotification("Extraction request failed.", "error");
             }
         });
     }
@@ -837,7 +892,7 @@ function initForms() {
             e.preventDefault();
             const file = forensicsFile ? forensicsFile.files[0] : null;
             if (!file) {
-                alert("Please select an image file.");
+                showNotification("Please select an image file.", "error");
                 return;
             }
             const formData = new FormData();
@@ -859,7 +914,7 @@ function initForms() {
                     <div style="grid-column: span 2;"><strong>Heuristic Indicators:</strong><ul>${(data.indicators || []).map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>
                 `;
             } catch (err) {
-                alert("Forensics analysis failed.");
+                showNotification("Forensics analysis failed.", "error");
             }
         });
     }
@@ -869,7 +924,12 @@ function initForms() {
     if (integrityForm) {
         integrityForm.addEventListener("submit", async (e) => {
             e.preventDefault();
-            const file = document.getElementById("integrity-file").files[0];
+            const fileInput = document.getElementById("integrity-file");
+            const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+            if (!file) {
+                showNotification("Please select a file first.", "error");
+                return;
+            }
             const refHash = document.getElementById("integrity-ref").value;
             const formData = new FormData();
             formData.append("file", file);
@@ -894,7 +954,7 @@ function initForms() {
                     ${matchHtml}
                 `;
             } catch (err) {
-                alert("Integrity verification failed.");
+                showNotification("Integrity verification failed.", "error");
             }
         });
     }
@@ -925,10 +985,10 @@ function initForms() {
                     newInvForm.reset();
                     showNotification("Investigation case created successfully", "success");
                 } else {
-                    alert("Failed to create investigation.");
+                    showNotification("Failed to create investigation.", "error");
                 }
             } catch (err) {
-                alert("Request failed.");
+                showNotification("Request failed.", "error");
             }
         });
     }
@@ -945,7 +1005,7 @@ function showNotification(message, type = "info") {
     notification.style.borderRadius = '8px';
     notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
     notification.style.zIndex = '1001';
-    notification.style.backgroundColor = type === 'success' ? '#10b981' : '#ef4444';
+    notification.style.backgroundColor = type === 'success' ? '#10b981' : type === 'warning' ? '#f59e0b' : '#ef4444';
     notification.style.color = '#ffffff';
     notification.style.fontFamily = 'Inter, sans-serif';
     notification.style.fontSize = '0.875rem';
@@ -986,6 +1046,255 @@ function showNetworkError() {
     }, 3000);
 }
 
+function updateTelemetryTimeAxis(range) {
+    const axis = document.getElementById("telemetry-time-axis");
+    if (!axis) return;
+    const labelsByRange = {
+        "15m": ["-15m", "-11m", "-7m", "-4m", "Live"],
+        "1h": ["-60m", "-45m", "-30m", "-15m", "Live"],
+        "6h": ["-6h", "-4.5h", "-3h", "-1.5h", "Live"],
+        "24h": ["-24h", "-18h", "-12h", "-6h", "Live"]
+    };
+    const labels = labelsByRange[range] || labelsByRange["1h"];
+    axis.innerHTML = labels.map(l => "<span>" + l + "</span>").join("");
+}
+
+async function loadDevices() {
+    try {
+        const res = await fetch("/api/devices");
+        if (!res.ok) throw new Error("Failed to load devices");
+        const devices = await res.json();
+        const tbody = document.getElementById("devices-table-body");
+        if (!tbody) return;
+
+        if (!devices || devices.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 16px;">No devices registered. Click "Add Device" to record a host.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = devices.map(dev => {
+            const statusClass = dev.status === "Active" ? "badge-success" : dev.status === "Quarantined" ? "badge-danger" : "badge-warning";
+            return `
+                <tr>
+                    <td><code>${escapeHtml(dev.id)}</code></td>
+                    <td><code>${escapeHtml(dev.ip_address || "N/A")}</code></td>
+                    <td><code>${escapeHtml(dev.mac_address || "N/A")}</code></td>
+                    <td><span class="badge ${statusClass}">${escapeHtml(dev.status)}</span></td>
+                    <td>${escapeHtml(dev.observation_source || "Unknown")}</td>
+                    <td>${escapeHtml(dev.last_seen || "N/A")}</td>
+                    <td><button class="btn btn-sm btn-outline-danger" onclick="deleteDevice('${encodeURIComponent(dev.id)}')" title="Remove Device"><i class="fa-solid fa-trash"></i></button></td>
+                </tr>
+            `;
+        }).join("");
+    } catch (err) {
+        console.error("Failed to load devices", err);
+        showNotification(err.message, "error");
+    }
+}
+
+function openNewDeviceModal() {
+    const modal = document.getElementById("device-modal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeDeviceModal() {
+    const modal = document.getElementById("device-modal");
+    if (modal) modal.classList.add("hidden");
+    const form = document.getElementById("new-device-form");
+    if (form) form.reset();
+}
+
+async function handleCreateDevice(e) {
+    e.preventDefault();
+    const hostname = document.getElementById("dev-hostname").value;
+    const ip = document.getElementById("dev-ip").value;
+    const mac = document.getElementById("dev-mac").value;
+    const status = document.getElementById("dev-status").value;
+    const source = document.getElementById("dev-source").value;
+
+    const formData = new FormData();
+    formData.append("hostname", hostname);
+    formData.append("ip_address", ip);
+    formData.append("mac_address", mac);
+    formData.append("status", status);
+    formData.append("observation_source", source);
+
+    try {
+        const res = await fetch("/api/devices", { method: "POST", body: formData });
+        let data = null;
+        try { data = await res.json(); } catch (_) {}
+        if (!res.ok) {
+            const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : "Failed to add device";
+            throw new Error(detail);
+        }
+        showNotification("Device added successfully", "success");
+        closeDeviceModal();
+        loadDevices();
+        loadOverviewData();
+    } catch (err) {
+        showNotification(err.message, "error");
+    }
+}
+
+async function deleteDevice(deviceId) {
+    if (!window.confirm("Are you sure you want to remove this device?")) return;
+    try {
+        const id = decodeURIComponent(deviceId);
+        const res = await fetch(`/api/devices/${encodeURIComponent(id)}`, { method: "DELETE" });
+        let data = null;
+        try { data = await res.json(); } catch (_) {}
+        if (!res.ok) {
+            const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : "Failed to remove device";
+            throw new Error(detail);
+        }
+        showNotification("Device removed successfully", "success");
+        loadDevices();
+        loadOverviewData();
+    } catch (err) {
+        showNotification(err.message, "error");
+    }
+}
+
+async function loadAnalysisHistory() {
+    try {
+        const res = await fetch("/api/network/history");
+        if (!res.ok) throw new Error("Failed to load analysis history");
+        const records = await res.json();
+        const tbody = document.getElementById("analysis-history-tbody");
+        if (!tbody) return;
+
+        if (!records || records.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 16px;">No analysis history recorded yet.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = records.map(item => {
+            const details = item.details && typeof item.details === "object" ? item.details : {};
+            const recordsCount = details.total_records !== undefined ? details.total_records : "-";
+            const threatCount = details.threat_count !== undefined ? details.threat_count : 0;
+            const threatBadge = threatCount > 0
+                ? `<span class="badge badge-danger">${escapeHtml(threatCount)} threats</span>`
+                : `<span class="badge badge-success">0 threats</span>`;
+            return `
+                <tr>
+                    <td>${escapeHtml(item.timestamp || "N/A")}</td>
+                    <td><code>${escapeHtml(item.filename || "Unknown")}</code></td>
+                    <td>${escapeHtml(item.operation_type || "Network Analysis")}</td>
+                    <td>${escapeHtml(recordsCount)}</td>
+                    <td>${threatBadge}</td>
+                    <td><span class="badge badge-info">${escapeHtml(item.status || "Completed")}</span></td>
+                </tr>
+            `;
+        }).join("");
+    } catch (err) {
+        console.error("Failed to load analysis history", err);
+    }
+}
+
+function initGlobalSearch() {
+    const searchInput = document.getElementById("global-search");
+    const dropdown = document.getElementById("search-results-dropdown");
+    if (!searchInput || !dropdown) return;
+
+    let debounceTimer = null;
+    let requestSeq = 0;
+
+    function hideDropdown() {
+        dropdown.classList.add("hidden");
+    }
+
+    function openResult(viewId) {
+        hideDropdown();
+        searchInput.value = "";
+        switchView(viewId);
+    }
+
+    function renderSection(title, items, viewId, titleFn, subtitleFn) {
+        if (!items || items.length === 0) return "";
+        const header = `<div class="search-category-header">${escapeHtml(title)} (${items.length})</div>`;
+        const rows = items.map(item => `
+            <div class="search-result-item" onclick="switchView('${viewId}'); document.getElementById('search-results-dropdown').classList.add('hidden');">
+                <div class="search-title">${escapeHtml(titleFn(item))}</div>
+                <div class="search-subtitle">${escapeHtml(subtitleFn(item))}</div>
+            </div>
+        `).join("");
+        return header + rows;
+    }
+
+    searchInput.addEventListener("input", () => {
+        const query = searchInput.value.trim();
+        if (debounceTimer) clearTimeout(debounceTimer);
+        if (query.length < 2) {
+            hideDropdown();
+            return;
+        }
+        debounceTimer = setTimeout(async () => {
+            const seq = ++requestSeq;
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                if (seq !== requestSeq) return;
+                if (!res.ok) throw new Error("Search failed");
+                const data = await res.json();
+                if (seq !== requestSeq) return;
+
+                if (!data || data.total_results === 0) {
+                    dropdown.innerHTML = `<div class="search-no-results">No matching records found for "${escapeHtml(query)}"</div>`;
+                    dropdown.classList.remove("hidden");
+                    return;
+                }
+
+                const results = data.results || {};
+                dropdown.innerHTML = [
+                    renderSection("Investigations", results.investigations, "investigations-view",
+                        inv => inv.title || inv.id || "Investigation",
+                        inv => [inv.id, inv.case_ref, inv.status].filter(Boolean).join(" • ")),
+                    renderSection("Devices", results.devices, "devices-view",
+                        dev => dev.hostname || dev.ip_address || dev.id || "Device",
+                        dev => [dev.ip_address, dev.mac_address, dev.status].filter(Boolean).join(" • ")),
+                    renderSection("Integrity Baselines", results.integrity_baselines, "integrity-view",
+                        base => base.filename || "Baseline",
+                        base => [base.sha256 ? base.sha256.slice(0, 16) + "..." : "", base.recorded_at].filter(Boolean).join(" • ")),
+                    renderSection("Analysis History", results.analysis_history, "network-view",
+                        item => item.filename || "Analysis",
+                        item => [item.operation_type, item.timestamp, item.status].filter(Boolean).join(" • "))
+                ].join("");
+                dropdown.classList.remove("hidden");
+            } catch (err) {
+                if (seq !== requestSeq) return;
+                dropdown.innerHTML = `<div class="search-no-results">${escapeHtml(err.message)}</div>`;
+                dropdown.classList.remove("hidden");
+            }
+        }, 250);
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            hideDropdown();
+        }
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        hideDropdown();
+        closeDeviceModal();
+        closeModal();
+    });
+
+    const deviceModal = document.getElementById("device-modal");
+    if (deviceModal) {
+        deviceModal.addEventListener("click", (e) => {
+            if (e.target === deviceModal) closeDeviceModal();
+        });
+    }
+
+    const invModal = document.getElementById("investigation-modal");
+    if (invModal) {
+        invModal.addEventListener("click", (e) => {
+            if (e.target === invModal) closeModal();
+        });
+    }
+}
+
 // Modal management
 function openNewInvestigationModal() {
     document.getElementById("investigation-modal").classList.remove("hidden");
@@ -1020,7 +1329,7 @@ async function generateReport() {
         setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
         showNotification("Investigation report exported successfully", "success");
     } catch (err) {
-        alert("Failed to generate report.");
+        showNotification("Failed to generate report.", "error");
     }
 }
 

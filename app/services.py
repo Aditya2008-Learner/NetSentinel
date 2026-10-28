@@ -21,7 +21,10 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
 
-__all__ = ["analyze_logs", "summarize", "SRC_THRESHOLD", "DST_THRESHOLD", "RULE_DEFINITIONS"]
+__all__ = ["analyze_logs", "summarize", "SRC_THRESHOLD", "DST_THRESHOLD", "RULE_DEFINITIONS", "EventList"]
+
+class EventList(list):
+    total_rows: int = 0
 
 SRC_THRESHOLD = 10
 DST_THRESHOLD = 20
@@ -139,6 +142,17 @@ def _parse_timestamp(ts: str) -> datetime:
         raise ValueError(f"Invalid timestamp format '{ts}'") from exc
 
 
+def _clean_ip(ip_str: str) -> str:
+    ip = (ip_str or "").strip()
+    if not ip:
+        return ""
+    if ip.startswith("[") and "]" in ip:
+        return ip[1 : ip.index("]")].strip()
+    if ip.count(":") == 1:
+        return ip.split(":", 1)[0].strip()
+    return ip
+
+
 def _parse_port(value: str) -> Optional[int]:
     try:
         port = int(value)
@@ -249,10 +263,10 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
         )
 
     rows = list(reader)
+    events = EventList()
     if not rows:
-        return []
+        return events
 
-    events: List[Dict[str, object]] = []
     row_count = 0
     src_counts: Dict[Tuple[str, datetime], int] = defaultdict(int)
     dst_counts: Dict[Tuple[str, datetime], int] = defaultdict(int)
@@ -292,6 +306,9 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
         )
 
     for row_idx, row in enumerate(rows, start=1):
+        if not any(v and str(v).strip() for v in row.values()):
+            continue
+
         # Translate row to canonical fields
         canon_row = {}
         for k, v in row.items():
@@ -307,8 +324,8 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
         except Exception as exc:
             raise ValueError(f"Row {row_idx}: Invalid timestamp format '{ts_raw}' ({exc})")
 
-        src = (canon_row.get("src_ip") or "").strip()
-        dst = (canon_row.get("dst_ip") or "").strip()
+        src = _clean_ip(canon_row.get("src_ip") or "")
+        dst = _clean_ip(canon_row.get("dst_ip") or "")
         if not src or not dst:
             raise ValueError(f"Row {row_idx}: Missing src_ip or dst_ip")
 
@@ -409,12 +426,13 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
             )
 
     if row_count == 0:
-        raise ValueError("CSV file contains no data rows to analyze.")
+        return events
 
+    events.total_rows = row_count
     return events
 
 
-def summarize(events: List[Dict[str, str]], total_rows: int = 0) -> Dict[str, object]:
+def summarize(events: List[Dict[str, str]], total_rows: Optional[int] = None) -> Dict[str, object]:
     """Count events and unique hosts for the dashboard header."""
     by_severity = {"high": 0, "medium": 0, "low": 0}
     sources: Set[str] = set()
@@ -426,6 +444,8 @@ def summarize(events: List[Dict[str, str]], total_rows: int = 0) -> Dict[str, ob
             sources.add(str(event["src_ip"]))
         if event.get("dst_ip"):
             destinations.add(str(event["dst_ip"]))
+    if total_rows is None or (total_rows == 0 and getattr(events, "total_rows", 0) > 0):
+        total_rows = getattr(events, "total_rows", 0) if getattr(events, "total_rows", 0) > 0 else len(events)
     return {
         "total": len(events),
         "total_records_analyzed": total_rows,

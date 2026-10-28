@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Net Sentinel — Cybersecurity & Digital Forensics</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+    <script>
+        if (window.location.protocol === "file:") {
+            window.addEventListener("DOMContentLoaded", () => {
+                const banner = document.createElement("div");
+                banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#ef4444;color:#fff;padding:12px 20px;font-family:Inter,sans-serif;font-weight:600;font-size:0.875rem;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.5);";
+                banner.innerHTML = "⚠️ Net Sentinel cannot run directly from file:///. Start the server with <code>python main.py</code> (<a href='http://localhost:8000' style='color:#fff;text-decoration:underline;'>http://localhost:8000/</a>) or visit <a href='https://net-sentinel-zeta.vercel.app/' style='color:#fff;text-decoration:underline;'>https://net-sentinel-zeta.vercel.app/</a>.";
+                document.body.prepend(banner);
+            });
+        }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -94,9 +104,10 @@
                     <span id="current-page-title">Overview Dashboard</span>
                 </div>
                 <div class="top-nav-right">
-                    <div class="search-box">
+                    <div class="search-box" style="position: relative;">
                         <i class="fa-solid fa-search"></i>
                         <input type="text" placeholder="Search investigations, hashes..." id="global-search" />
+                        <div id="search-results-dropdown" class="search-results-dropdown hidden"></div>
                     </div>
                     <div class="system-status">
                         <span class="pulse-dot"></span> Agent: Standalone
@@ -395,13 +406,14 @@
                             <div class="upload-drop-zone" id="network-drop-zone">
                                 <i class="fa-solid fa-cloud-arrow-up"></i>
                                 <p style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Click to select or drop CSV traffic logs</p>
-                                <p style="font-size: 0.8rem; color: var(--text-muted);">Required schema: timestamp, src_ip, dst_ip, src_port, dst_port, protocol, bytes</p>
+                                <p style="font-size: 0.8rem; color: var(--text-muted);">Required: timestamp, src_ip, dst_ip (optional: src_port, dst_port, protocol, bytes)</p>
                                 <div id="selected-file-display" style="display: none; margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; color: var(--accent-emerald);"></div>
                             </div>
                             <input type="file" id="log-file-input" accept=".csv" style="display: none;" />
                             <button type="submit" class="btn btn-primary" style="margin-top: 8px;">
                                 <i class="fa-solid fa-microchip"></i> Analyze Traffic Logs
                             </button>
+                            <button type="button" class="btn btn-secondary" id="load-sample-csv-btn" onclick="loadSampleCsv()" style="margin-top: 8px; margin-left: 8px;"><i class="fa-solid fa-file-arrow-down"></i> Load Demo CSV</button>
                         </form>
                     </div>
 
@@ -425,6 +437,35 @@
                             </table>
                         </div>
                     </div>
+
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.1rem; color: #fff;"><i class="fa-solid fa-clock-rotate-left" style="color: var(--accent-sky); margin-right: 8px;"></i> Recent Analysis History</h3>
+                                <p style="margin: 4px 0 0; font-size: 0.82rem; color: var(--text-muted);">Audit log of analyzed network connection records.</p>
+                            </div>
+                            <button class="btn btn-secondary" onclick="loadAnalysisHistory()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Log File</th>
+                                        <th>Operation</th>
+                                        <th>Total Records</th>
+                                        <th>Threats Detected</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="analysis-history-tbody">
+                                    <tr>
+                                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 16px;">No analysis history loaded.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- 3. DEVICE INVENTORY VIEW -->
@@ -432,6 +473,8 @@
                     <div class="section-header">
                         <h2>Device & Host Inventory</h2>
                         <p>Tracked devices and observed endpoints in the current environment.</p>
+                        <button class="btn btn-secondary" onclick="loadDevices()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                        <button class="btn btn-primary" onclick="openNewDeviceModal()"><i class="fa-solid fa-plus"></i> Add Device</button>
                     </div>
                     <div class="card">
                         <div class="table-container">
@@ -444,26 +487,10 @@
                                         <th>Status</th>
                                         <th>Observation Source</th>
                                         <th>Last Seen</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>DEV-001 (Local Gateway)</td>
-                                        <td><code>192.168.1.1</code></td>
-                                        <td><code>a1:b2:c3:d4:e5:f6</code></td>
-                                        <td><span class="badge badge-success">Active</span></td>
-                                        <td>ARP Cache / Gateway</td>
-                                        <td>Just now</td>
-                                    </tr>
-                                    <tr>
-                                        <td>DEV-002 (Analysis Node)</td>
-                                        <td><code>192.168.1.50</code></td>
-                                        <td><code>f6:e5:d4:c3:b2:a1</code></td>
-                                        <td><span class="badge badge-success">Active</span></td>
-                                        <td>Local Interface</td>
-                                        <td>Just now</td>
-                                    </tr>
-                                </tbody>
+                                <tbody id="devices-table-body"></tbody>
                             </table>
                         </div>
                     </div>
@@ -656,6 +683,43 @@
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create Case</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- New Device Modal -->
+    <div id="device-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3><i class="fa-solid fa-network-wired" style="color: var(--accent-emerald); margin-right: 8px;"></i> Add Tracked Device</h3>
+            <form id="new-device-form" onsubmit="handleCreateDevice(event)">
+                <div class="form-group">
+                    <label>Hostname / Identifier *</label>
+                    <input type="text" id="dev-hostname" placeholder="e.g. Workstation-Alpha, DMZ-Router" required />
+                </div>
+                <div class="form-group">
+                    <label>IP Address *</label>
+                    <input type="text" id="dev-ip" placeholder="e.g. 192.168.1.105" required />
+                </div>
+                <div class="form-group">
+                    <label>MAC Address</label>
+                    <input type="text" id="dev-mac" placeholder="e.g. 00:1a:2b:3c:4d:5e" />
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="dev-status">
+                        <option value="Active" selected>Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="Quarantined">Quarantined</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Observation Source</label>
+                    <input type="text" id="dev-source" placeholder="e.g. DHCP Lease, ARP Cache" value="Manual Entry" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeDeviceModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Device</button>
                 </div>
             </form>
         </div>

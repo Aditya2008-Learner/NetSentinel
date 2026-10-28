@@ -74,3 +74,47 @@ def test_analyze_all_heuristics():
     assert summary["by_severity"]["low"] > 0
     assert summary["unique_sources"] > 0
     assert summary["unique_destinations"] > 0
+
+
+def test_analyze_logs_skips_blank_lines():
+    csv_text = (
+        "timestamp,src_ip,dst_ip\n"
+        "\n"
+        "2023-10-01T12:00:00,192.168.1.10,10.0.0.5\n"
+        "   \n"
+        "2023-10-01T12:00:01,192.168.1.10,10.0.0.5\n"
+        "\n\n"
+    )
+    events = analyze_logs(csv_text)
+    assert getattr(events, "total_rows", 0) == 2
+    summary = summarize(events)
+    assert summary["total_records_analyzed"] == 2
+
+
+def test_clean_ip_port_suffix():
+    csv_text = (
+        "timestamp,src_ip,dst_ip,src_port,dst_port,protocol,bytes\n"
+        "2023-10-01T12:04:00,192.168.1.88:9999,10.0.0.200:80,60000,443,TCP,15728640\n"
+    )
+    events = analyze_logs(csv_text)
+    assert len(events) == 1
+    assert events[0]["src_ip"] == "192.168.1.88"
+    assert events[0]["dst_ip"] == "10.0.0.200"
+    summary = summarize(events)
+    assert summary["unique_sources"] == 1
+    assert summary["unique_destinations"] == 1
+
+
+def test_clean_ip_port_stripping():
+    csv_text = (
+        "timestamp,src_ip,dst_ip,src_port,dst_port,protocol,bytes\n"
+        "2023-10-01T12:04:00,192.168.1.88:9999,10.0.0.200:80,60000,443,TCP,15728640\n"
+    )
+    events = analyze_logs(csv_text)
+    assert len(events) == 1
+    assert events[0]["src_ip"] == "192.168.1.88"
+    assert events[0]["dst_ip"] == "10.0.0.200"
+    summary = summarize(events)
+    assert summary["unique_sources"] == 1
+    assert summary["unique_destinations"] == 1
+

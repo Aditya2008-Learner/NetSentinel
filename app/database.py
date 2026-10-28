@@ -6,11 +6,11 @@ from typing import Generator
 
 import os
 
-# Use /tmp on serverless environments like Vercel where root is read-only
+BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
 if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
     DB_PATH = pathlib.Path("/tmp/netsentinel.db")
 else:
-    DB_PATH = pathlib.Path("data/netsentinel.db")
+    DB_PATH = BASE_DIR / "data" / "netsentinel.db"
 
 
 def init_db_conn(conn: sqlite3.Connection) -> None:
@@ -76,6 +76,23 @@ def init_db_conn(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+    cursor.execute("SELECT COUNT(*) FROM devices")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(
+            """
+            INSERT INTO devices (id, ip_address, mac_address, hostname, status, observation_source, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            ("DEV-001", "192.168.1.1", "a1:b2:c3:d4:e5:f6", "Local Gateway", "Active", "ARP Cache / Gateway"),
+        )
+        cursor.execute(
+            """
+            INSERT INTO devices (id, ip_address, mac_address, hostname, status, observation_source, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            ("DEV-002", "192.168.1.50", "f6:e5:d4:c3:b2:a1", "Analysis Node", "Active", "Local Interface"),
+        )
 
     conn.commit()
 
