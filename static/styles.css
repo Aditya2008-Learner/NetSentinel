@@ -60,6 +60,11 @@
     /* Spacing Units */
     --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     --transition-smooth: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* Semantic Aliases */
+    --border-color: var(--border-default);
+    --success: var(--accent-emerald);
+    --danger: var(--accent-rose);
 }
 
 /* ==========================================================================
@@ -588,6 +593,13 @@ code, pre, .hash-text, .ip-text, td code {
     margin-top: 2px;
 }
 
+/* Multi-column Grid Layouts */
+.grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+}
+
 /* Dashboard Secondary Grid */
 .dashboard-grid {
     display: grid;
@@ -785,6 +797,25 @@ code, pre, .hash-text, .ip-text, td code {
     box-shadow: 0 4px 12px rgba(244, 63, 94, 0.35);
 }
 
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    border-radius: var(--radius-sm);
+    gap: 6px;
+}
+
+.btn-outline-danger {
+    background-color: transparent;
+    color: var(--accent-rose);
+    border-color: var(--accent-rose-border);
+}
+
+.btn-outline-danger:hover {
+    background-color: var(--accent-rose-subtle);
+    border-color: var(--accent-rose);
+    color: #fb7185;
+}
+
 /* ==========================================================================
    Data Tables (SOC High-Density & Readability)
    ========================================================================== */
@@ -881,6 +912,69 @@ input[type="text"]:focus, textarea:focus, select:focus {
     box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.15);
 }
 
+input[type="file"] {
+    width: 100%;
+    background-color: var(--bg-surface-inset);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+input[type="file"]:hover {
+    border-color: var(--border-hover);
+}
+
+input[type="file"]:focus {
+    outline: none;
+    border-color: var(--border-active);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.15);
+}
+
+input[type="file"]::file-selector-button {
+    background-color: var(--bg-surface-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 6px 14px;
+    margin-right: 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+input[type="file"]::file-selector-button:hover {
+    background-color: var(--bg-surface-active);
+    border-color: var(--accent-sky-border);
+    color: #ffffff;
+}
+
+input[type="file"]::-webkit-file-upload-button {
+    background-color: var(--bg-surface-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 6px 14px;
+    margin-right: 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+input[type="file"]::-webkit-file-upload-button:hover {
+    background-color: var(--bg-surface-active);
+    border-color: var(--accent-sky-border);
+    color: #ffffff;
+}
+
 /* Polished Upload Drop Zone */
 .upload-drop-zone {
     border: 2px dashed var(--border-default);
@@ -939,6 +1033,7 @@ input[type="text"]:focus, textarea:focus, select:focus {
 }
 
 .modal-content {
+    position: relative;
     background-color: var(--bg-surface-elevated);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
@@ -952,6 +1047,30 @@ input[type="text"]:focus, textarea:focus, select:focus {
 @keyframes modalIn {
     from { opacity: 0; transform: scale(0.97) translateY(4px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.06);
 }
 
 .modal-content h3 {
@@ -970,6 +1089,223 @@ input[type="text"]:focus, textarea:focus, select:focus {
 }
 
 /* ==========================================================================
+   Result Box Component (Stego, Integrity & Operations Feedback)
+   ========================================================================== */
+.result-box {
+    margin-top: 18px;
+    background-color: var(--bg-surface-inset);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: 16px 20px;
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    box-shadow: var(--shadow-sm);
+    animation: fadeIn var(--transition-smooth) forwards;
+}
+
+.result-box.result-success {
+    border-color: var(--accent-emerald-border);
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.07) 0%, var(--bg-surface-inset) 100%);
+}
+
+.result-box.result-danger {
+    border-color: var(--accent-rose-border);
+    background: linear-gradient(180deg, rgba(244, 63, 94, 0.07) 0%, var(--bg-surface-inset) 100%);
+}
+
+.result-box.result-warning {
+    border-color: var(--accent-amber-border);
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.07) 0%, var(--bg-surface-inset) 100%);
+}
+
+.result-box pre {
+    margin-top: 10px;
+    background: #060a12;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    color: #cbd5e1;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.result-box strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* ==========================================================================
+   Image Forensics Grid & Metric Tiles
+   ========================================================================== */
+.forensics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.forensics-grid > div,
+.forensics-stat-tile {
+    background-color: var(--bg-surface-inset);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    transition: border-color var(--transition-fast);
+}
+
+.forensics-grid > div:hover,
+.forensics-stat-tile:hover {
+    border-color: var(--border-hover);
+}
+
+.forensics-grid > div strong,
+.forensics-stat-tile strong {
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 600;
+}
+
+.forensics-indicators-card,
+.forensics-grid > div[style*="grid-column: span 2"] {
+    grid-column: span 2;
+    background-color: var(--bg-surface-inset);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+}
+
+.forensics-indicator-list,
+.forensics-grid ul {
+    margin-top: 8px;
+    padding-left: 20px;
+    list-style-type: disc;
+    color: var(--text-secondary);
+}
+
+.forensics-indicator-list li,
+.forensics-grid ul li {
+    margin-bottom: 6px;
+    font-size: 0.86rem;
+    line-height: 1.5;
+}
+
+/* ==========================================================================
+   Settings Rows & Configuration Items
+   ========================================================================== */
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 16px;
+}
+
+.setting-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.setting-item:first-child {
+    padding-top: 8px;
+}
+
+.setting-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.setting-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.setting-desc {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+/* ==========================================================================
+   Report Export Viewer
+   ========================================================================== */
+.report-preview {
+    margin-top: 20px;
+    background: #060a12;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.report-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 18px;
+    background-color: var(--bg-surface-inset);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--accent-sky);
+}
+
+.report-preview pre,
+.report-preview pre#report-json-output {
+    max-height: 420px;
+    overflow: auto;
+    padding: 18px 20px;
+    margin: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: #cbd5e1;
+    white-space: pre;
+}
+
+/* Scrollbars for report-preview and code blocks */
+.report-preview pre::-webkit-scrollbar,
+.result-box pre::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.report-preview pre::-webkit-scrollbar-track,
+.result-box pre::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.report-preview pre::-webkit-scrollbar-thumb,
+.result-box pre::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: var(--radius-pill);
+}
+
+.report-preview pre::-webkit-scrollbar-thumb:hover,
+.result-box pre::-webkit-scrollbar-thumb:hover {
+    background: var(--border-hover);
+}
+
+/* ==========================================================================
    Responsive Breakpoints
    ========================================================================== */
 @media (max-width: 1024px) {
@@ -978,7 +1314,20 @@ input[type="text"]:focus, textarea:focus, select:focus {
     }
 }
 
+@media (max-width: 960px) {
+    .grid-2 {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 768px) {
+    .forensics-grid {
+        grid-template-columns: 1fr;
+    }
+    .forensics-indicators-card,
+    .forensics-grid > div[style*="grid-column: span 2"] {
+        grid-column: span 1 !important;
+    }
     .sidebar {
         width: 72px;
         padding: 16px 8px;
