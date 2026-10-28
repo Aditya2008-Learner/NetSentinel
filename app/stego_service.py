@@ -14,6 +14,12 @@ def _get_pixel_tuples(img: Image.Image):
     return list(img.getdata())
 
 
+def _iter_pixel_tuples(img: Image.Image):
+    if hasattr(img, "get_flattened_data"):
+        return iter(img.get_flattened_data())
+    return iter(img.getdata())
+
+
 def calculate_sha256(file_bytes: bytes) -> str:
     return hashlib.sha256(file_bytes).hexdigest()
 
@@ -114,7 +120,7 @@ def analyze_image_forensics(image_path: str, file_bytes: bytes) -> Dict[str, obj
             rgb_img = img.convert("RGB")
             lsb_count = 0
             total_samples = 0
-            for pixel in _get_pixel_tuples(rgb_img):
+            for pixel in _iter_pixel_tuples(rgb_img):
                 r, g, b = pixel
                 if (r & 1) ^ (g & 1) ^ (b & 1):
                     lsb_count += 1

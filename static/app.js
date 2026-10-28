@@ -1203,17 +1203,17 @@ function initGlobalSearch() {
         dropdown.classList.add("hidden");
     }
 
-    function openResult(viewId) {
+    window.openSearchResult = function(viewId) {
         hideDropdown();
         searchInput.value = "";
         switchView(viewId);
-    }
+    };
 
     function renderSection(title, items, viewId, titleFn, subtitleFn) {
         if (!items || items.length === 0) return "";
         const header = `<div class="search-category-header">${escapeHtml(title)} (${items.length})</div>`;
         const rows = items.map(item => `
-            <div class="search-result-item" onclick="switchView('${viewId}'); document.getElementById('search-results-dropdown').classList.add('hidden');">
+            <div class="search-result-item" onclick="openSearchResult('${viewId}')">
                 <div class="search-title">${escapeHtml(titleFn(item))}</div>
                 <div class="search-subtitle">${escapeHtml(subtitleFn(item))}</div>
             </div>
