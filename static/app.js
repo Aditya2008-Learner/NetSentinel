@@ -35,6 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initForms();
     initTelemetryChart();
     initGlobalSearch();
+    initModals();
 });
 
 // Pause polling when the tab is hidden; resume when visible again.
@@ -132,7 +133,7 @@ async function loadOverviewData() {
             recentList.innerHTML = data.recent_investigations.map(inv => `
                 <div style="padding: 8px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
                     <div><strong>${escapeHtml(inv.id)}</strong>: ${escapeHtml(inv.title)}</div>
-                    <span class="badge badge-info">${escapeHtml(inv.status)}</span>
+                    <span class="badge ${getInvestigationBadgeClass(inv.status)}">${escapeHtml(inv.status)}</span>
                 </div>
             `).join("");
         } else {
@@ -575,6 +576,14 @@ async function loadNetworkResults(data) {
 }
 
 // Investigation management
+function getInvestigationBadgeClass(status) {
+    const s = String(status || "").toLowerCase().trim();
+    if (s === "closed" || s === "resolved") return "badge-success";
+    if (s === "in progress" || s === "review" || s === "in review" || s === "in_progress") return "badge-warning";
+    if (s === "escalated" || s === "critical") return "badge-danger";
+    return "badge-info";
+}
+
 function loadInvestigations() {
     return fetch("/api/investigations")
         .then(res => res.json())
@@ -592,7 +601,7 @@ function loadInvestigations() {
                     <td><code>${escapeHtml(inv.id)}</code></td>
                     <td><strong>${escapeHtml(inv.title)}</strong></td>
                     <td>${escapeHtml(inv.case_ref || "N/A")}</td>
-                    <td><span class="badge badge-success">${escapeHtml(inv.status)}</span></td>
+                    <td><span class="badge ${getInvestigationBadgeClass(inv.status)}">${escapeHtml(inv.status)}</span></td>
                     <td>${escapeHtml(inv.created_at)}</td>
                 </tr>
             `).join("");
@@ -782,6 +791,9 @@ function initForms() {
                 previewBox.innerHTML = `
                     <img src="${currentEmbedPreviewUrl}" alt="Cover Image Preview" style="max-height: 100px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color); object-fit: contain; margin-top: 6px;" />
                 `;
+            } else {
+                const previewBox = document.getElementById("embed-preview-box");
+                if (previewBox) previewBox.innerHTML = "";
             }
         });
     }
@@ -805,25 +817,89 @@ function initForms() {
                 const box = document.getElementById("embed-result");
                 box.classList.remove("hidden");
                 if (res.ok) {
+                    box.className = "result-box result-success";
                     const downloadHref = data.image_data || data.download_url;
                     const fileName = data.filename || "encoded_image.png";
                     box.innerHTML = `
-                        <div style="margin-bottom: 8px;">✅ ${escapeHtml(data.message)}</div>
-                        ${data.image_data ? `<img src="${data.image_data}" alt="Encoded Preview" style="max-height: 100px; display: block; border-radius: 6px; margin: 8px 0; border: 1px solid var(--border-color);" />` : ''}
-                        <a href="${downloadHref}" class="btn btn-primary" style="margin-top: 6px; display: inline-block;" download="${escapeHtml(fileName)}">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i>
+                                <strong>${escapeHtml(data.message || "Payload embedded successfully.")}</strong>
+                            </div>
+                            <span class="badge badge-success"><i class="fa-solid fa-shield-halved"></i> Encoded</span>
+                        </div>
+                        <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 8px;">
+                            Carrier File: <span style="font-family: 'JetBrains Mono', monospace; color: var(--accent-sky);">${escapeHtml(fileName)}</span>
+                        </div>
+                        ${data.image_data ? `
+                        <div style="margin: 8px 0;">
+                            <img src="${data.image_data}" alt="Encoded Preview" style="max-height: 100px; max-width: 100%; display: block; border-radius: 6px; border: 1px solid var(--border-color); object-fit: contain;" />
+                        </div>` : ''}
+                        <a href="${downloadHref}" class="btn btn-primary" style="margin-top: 6px; display: inline-flex; align-items: center; gap: 6px;" download="${escapeHtml(fileName)}">
                             <i class="fa-solid fa-download"></i> Download Encoded PNG
                         </a>
                     `;
                 } else {
-                    box.innerHTML = `❌ Error: ${escapeHtml(data.detail)}`;
+                    box.className = "result-box result-danger";
+                    const errorMsg = data && data.detail ? data.detail : "Embedding failed.";
+                    box.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-xmark" style="color: var(--accent-rose);"></i>
+                            <div>
+                                <strong>Embedding Error:</strong> ${escapeHtml(errorMsg)}
+                            </div>
+                        </div>
+                    `;
                 }
             } catch (err) {
+                const box = document.getElementById("embed-result");
+                if (box) {
+                    box.className = "result-box result-danger";
+                    box.classList.remove("hidden");
+                    box.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-xmark" style="color: var(--accent-rose);"></i>
+                            <div>
+                                <strong>Error:</strong> Embedding request failed. Check server connection.
+                            </div>
+                        </div>
+                    `;
+                }
                 showNotification("Embedding failed.", "error");
             }
         });
     }
 
-    // 3. Extract Form
+    // 3. Extract Form with safe local preview
+    const extractImageInput = document.getElementById("extract-image");
+    let currentExtractPreviewUrl = null;
+
+    if (extractImageInput) {
+        extractImageInput.addEventListener("change", () => {
+            if (currentExtractPreviewUrl) {
+                URL.revokeObjectURL(currentExtractPreviewUrl);
+                currentExtractPreviewUrl = null;
+            }
+            if (extractImageInput.files && extractImageInput.files[0]) {
+                const file = extractImageInput.files[0];
+                currentExtractPreviewUrl = URL.createObjectURL(file);
+                let previewBox = document.getElementById("extract-preview-box");
+                if (!previewBox) {
+                    previewBox = document.createElement("div");
+                    previewBox.id = "extract-preview-box";
+                    previewBox.style.marginTop = "8px";
+                    extractImageInput.parentNode.appendChild(previewBox);
+                }
+                previewBox.innerHTML = `
+                    <img src="${currentExtractPreviewUrl}" alt="Carrier Image Preview" style="max-height: 100px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color); object-fit: contain; margin-top: 6px;" />
+                `;
+            } else {
+                const previewBox = document.getElementById("extract-preview-box");
+                if (previewBox) previewBox.innerHTML = "";
+            }
+        });
+    }
+
     const extractForm = document.getElementById("extract-form");
     if (extractForm) {
         extractForm.addEventListener("submit", async (e) => {
@@ -843,11 +919,68 @@ function initForms() {
                 const box = document.getElementById("extract-result");
                 box.classList.remove("hidden");
                 if (res.ok) {
-                    document.getElementById("extracted-text-output").textContent = data.secret;
+                    box.className = "result-box result-success";
+                    box.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i>
+                                <strong>Extracted Secret Payload</strong>
+                                <span class="badge badge-success"><i class="fa-solid fa-check"></i> Decoded</span>
+                            </div>
+                            <button type="button" class="btn btn-secondary" id="copy-secret-btn" style="padding: 4px 10px; font-size: 0.78rem;">
+                                <i class="fa-regular fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <pre id="extracted-text-output"></pre>
+                    `;
+                    const textOutput = document.getElementById("extracted-text-output");
+                    if (textOutput) {
+                        textOutput.textContent = data.secret;
+                    }
+                    const copyBtn = document.getElementById("copy-secret-btn");
+                    if (copyBtn) {
+                        copyBtn.addEventListener("click", () => {
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(data.secret).then(() => {
+                                    copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+                                    setTimeout(() => {
+                                        copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy';
+                                    }, 2000);
+                                    showNotification("Secret payload copied to clipboard.", "success");
+                                }).catch(() => {
+                                    showNotification("Failed to copy payload.", "error");
+                                });
+                            }
+                        });
+                    }
                 } else {
-                    document.getElementById("extracted-text-output").textContent = data.detail || "Extraction failed.";
+                    box.className = "result-box result-danger";
+                    const errorMsg = data && data.detail ? data.detail : "Extraction failed.";
+                    box.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-xmark" style="color: var(--accent-rose);"></i>
+                            <div>
+                                <strong>Extraction Error:</strong> ${escapeHtml(errorMsg)}
+                            </div>
+                        </div>
+                        <pre id="extracted-text-output" style="display: none;"></pre>
+                    `;
                 }
             } catch (err) {
+                const box = document.getElementById("extract-result");
+                if (box) {
+                    box.className = "result-box result-danger";
+                    box.classList.remove("hidden");
+                    box.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-xmark" style="color: var(--accent-rose);"></i>
+                            <div>
+                                <strong>Error:</strong> Extraction request failed. Check server connection.
+                            </div>
+                        </div>
+                        <pre id="extracted-text-output" style="display: none;"></pre>
+                    `;
+                }
                 showNotification("Extraction request failed.", "error");
             }
         });
@@ -873,14 +1006,14 @@ function initForms() {
                         previewBox = document.createElement("div");
                         previewBox.id = "forensics-preview-box";
                         previewBox.style.marginTop = "12px";
-                        previewBox.style.textAlign = "center";
                         forensicsFile.parentNode.appendChild(previewBox);
                     }
                     previewBox.innerHTML = `
-                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px;">
-                            Selected: <strong>${escapeHtml(file.name)}</strong> (${(file.size / 1024).toFixed(1)} KB)
+                        <div style="display: inline-flex; align-items: center; gap: 8px; background: var(--bg-surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 8px 12px; max-width: 100%;">
+                            <span class="badge badge-info"><i class="fa-solid fa-image"></i> Preview</span>
+                            <img src="${currentForensicsPreviewUrl}" alt="Local Forensics Preview" style="max-height: 120px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-subtle); object-fit: contain; background: #060a12;" />
+                            <span style="font-size: 0.8rem; color: var(--text-secondary); margin-left: auto;">${escapeHtml(file.name)} (${(file.size / 1024).toFixed(1)} KB)</span>
                         </div>
-                        <img src="${currentForensicsPreviewUrl}" alt="Local Forensics Preview" style="max-height: 140px; max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color); object-fit: contain; margin: 0 auto; display: block;" />
                     `;
                 }
             }
@@ -904,14 +1037,25 @@ function initForms() {
                 const container = document.getElementById("forensics-results");
                 container.classList.remove("hidden");
                 const details = document.getElementById("forensics-details");
+                
+                // Determine risk badge class based on susposity score
+                const score = Number(data.susposity_score || 0);
+                let riskBadgeClass = "badge-warning";
+                let riskLabel = "Moderate Risk";
+                if (score < 30) {
+                    riskBadgeClass = "badge-success";
+                    riskLabel = "Low Risk";
+                } else if (score > 70) {
+                    riskBadgeClass = "badge-danger";
+                    riskLabel = "Elevated Risk";
+                }
+
                 details.innerHTML = `
-                    <div><strong>Filename:</strong> ${escapeHtml(data.filename)}</div>
-                    <div><strong>Format:</strong> ${escapeHtml(data.format)} (${escapeHtml(data.mode)})</div>
-                    <div><strong>Dimensions:</strong> ${escapeHtml(data.dimensions)}</div>
-                    <div><strong>File Size:</strong> ${escapeHtml(data.file_size_bytes)} bytes</div>
-                    <div><strong>SHA-256:</strong> <code>${escapeHtml(data.sha256)}</code></div>
-                    <div><strong>Susposity Score:</strong> <span class="badge badge-warning">${escapeHtml(data.susposity_score)} / 100</span></div>
-                    <div style="grid-column: span 2;"><strong>Heuristic Indicators:</strong><ul>${(data.indicators || []).map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>
+                    <div class="forensics-stat-tile"><strong>Filename & Format</strong>${escapeHtml(data.filename)} &bull; ${escapeHtml(data.format)} (${escapeHtml(data.mode)})</div>
+                    <div class="forensics-stat-tile"><strong>Resolution & Size</strong>${escapeHtml(data.dimensions)} &bull; ${escapeHtml(data.file_size_bytes)} bytes</div>
+                    <div class="forensics-stat-tile"><strong>SHA-256 Hash</strong><code style="font-size: 0.82rem; word-break: break-all; background: #060a12; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-subtle);">${escapeHtml(data.sha256)}</code></div>
+                    <div class="forensics-stat-tile"><strong>LSB Susposity Score</strong><span class="badge ${riskBadgeClass}">${escapeHtml(data.susposity_score)} / 100 &bull; ${riskLabel}</span></div>
+                    <div class="forensics-indicators-card"><strong>Heuristic Indicators</strong><ul class="forensics-indicator-list">${(data.indicators || []).map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>
                 `;
             } catch (err) {
                 showNotification("Forensics analysis failed.", "error");
@@ -940,18 +1084,55 @@ function initForms() {
                 const data = await res.json();
                 const box = document.getElementById("integrity-result");
                 box.classList.remove("hidden");
+
+                let resultClass = "";
+                let statusHtml = "";
+                let statusIcon = "";
+                let statusLabel = "";
                 
-                let matchHtml = "";
                 if (data.reference_hash) {
-                    matchHtml = data.match 
-                        ? `<p style="color: var(--success); font-weight: bold; margin-top: 8px;">✅ Hash MATCHES trusted reference.</p>` 
-                        : `<p style="color: var(--danger); font-weight: bold; margin-top: 8px;">❌ Hash MISMATCH with reference!</p>`;
+                    if (data.match) {
+                        resultClass = "result-success";
+                        statusIcon = '<i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i>';
+                        statusLabel = "Hash MATCHES trusted reference";
+                    } else {
+                        resultClass = "result-danger";
+                        statusIcon = '<i class="fa-solid fa-circle-xmark" style="color: var(--accent-rose);"></i>';
+                        statusLabel = "Hash MISMATCH with reference";
+                    }
+                    statusHtml = `
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);">
+                            ${statusIcon}
+                            <span class="badge ${data.match ? "badge-success" : "badge-danger"}">${statusLabel}</span>
+                        </div>
+                    `;
+                } else {
+                    resultClass = "";
+                    statusHtml = `
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);">
+                            <i class="fa-solid fa-fingerprint" style="color: var(--accent-sky);"></i>
+                            <span class="badge badge-info">Standalone hash computed (no reference provided)</span>
+                        </div>
+                    `;
                 }
+                
+                box.className = `result-box ${resultClass}`.trim();
 
                 box.innerHTML = `
-                    <strong>File:</strong> ${escapeHtml(data.filename)}<br>
-                    <strong>Computed SHA-256:</strong> <code>${escapeHtml(data.current_sha256)}</code>
-                    ${matchHtml}
+                    <div style="margin-bottom: 8px;">
+                        <strong>Filename:</strong> ${escapeHtml(data.filename)}
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <strong>Computed SHA-256:</strong>
+                        <code style="font-size: 0.82rem; word-break: break-all; background: #060a12; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); display: block; margin-top: 4px; position: relative;">
+                            ${escapeHtml(data.current_sha256)}
+                            <button type="button" class="btn btn-secondary" onclick="navigator.clipboard.writeText('${escapeHtml(data.current_sha256)}').then(() => showNotification('SHA-256 hash copied to clipboard', 'success')).catch(() => showNotification('Failed to copy hash', 'error'))" style="position: absolute; top: 6px; right: 6px; padding: 2px 8px; font-size: 0.7rem; background: var(--bg-surface-elevated); border: 1px solid var(--border-default); border-radius: 4px; cursor: pointer;">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                        </code>
+                    </div>
+                    ${data.reference_hash ? `<div style="margin-bottom: 8px;"><strong>Reference SHA-256:</strong> <code style="font-size: 0.82rem; word-break: break-all; color: var(--text-secondary);">${escapeHtml(data.reference_hash)}</code></div>` : ''}
+                    ${statusHtml}
                 `;
             } catch (err) {
                 showNotification("Integrity verification failed.", "error");
@@ -982,13 +1163,43 @@ function initForms() {
                     closeModal();
                     loadInvestigations();
                     loadOverviewData();
-                    newInvForm.reset();
                     showNotification("Investigation case created successfully", "success");
                 } else {
                     showNotification("Failed to create investigation.", "error");
                 }
             } catch (err) {
                 showNotification("Request failed.", "error");
+            }
+        });
+    }
+
+    const copyReportBtn = document.getElementById("copy-report-json-btn");
+    if (copyReportBtn) {
+        copyReportBtn.addEventListener("click", async () => {
+            const output = document.getElementById("report-json-output");
+            let text = output ? output.textContent : "";
+            if (!text || !text.trim()) {
+                try {
+                    const res = await fetch("/api/reports/export");
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const data = await res.json();
+                    text = JSON.stringify(data, null, 2);
+                    if (output) output.textContent = text;
+                } catch (err) {
+                    showNotification("Failed to fetch report: " + err.message, "error");
+                    return;
+                }
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    copyReportBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+                    setTimeout(() => {
+                        copyReportBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy JSON';
+                    }, 2000);
+                    showNotification("Report JSON copied to clipboard", "success");
+                }).catch(() => {
+                    showNotification("Failed to copy JSON", "error");
+                });
             }
         });
     }
@@ -1276,10 +1487,10 @@ function initGlobalSearch() {
     document.addEventListener("keydown", (e) => {
         if (e.key !== "Escape") return;
         hideDropdown();
-        closeDeviceModal();
-        closeModal();
     });
+}
 
+function initModals() {
     const deviceModal = document.getElementById("device-modal");
     if (deviceModal) {
         deviceModal.addEventListener("click", (e) => {
@@ -1293,18 +1504,51 @@ function initGlobalSearch() {
             if (e.target === invModal) closeModal();
         });
     }
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            closeModal();
+            closeDeviceModal();
+        }
+    });
 }
 
-// Modal management
 function openNewInvestigationModal() {
-    document.getElementById("investigation-modal").classList.remove("hidden");
+    const modal = document.getElementById("investigation-modal");
+    if (modal) modal.classList.remove("hidden");
 }
 
 function closeModal() {
-    document.getElementById("investigation-modal").classList.add("hidden");
+    const modal = document.getElementById("investigation-modal");
+    if (modal) modal.classList.add("hidden");
+    const form = document.getElementById("new-investigation-form");
+    if (form) form.reset();
 }
 
-// Report generation with safe Blob download
+async function toggleReportPreview() {
+    const preview = document.getElementById("report-preview");
+    if (!preview) return;
+
+    if (!preview.classList.contains("hidden")) {
+        preview.classList.add("hidden");
+        return;
+    }
+
+    const output = document.getElementById("report-json-output");
+    if (output && (!output.textContent || !output.textContent.trim())) {
+        try {
+            const res = await fetch("/api/reports/export");
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            output.textContent = JSON.stringify(data, null, 2);
+        } catch (err) {
+            showNotification("Failed to load report preview: " + err.message, "error");
+            return;
+        }
+    }
+    preview.classList.remove("hidden");
+}
+
 async function generateReport() {
     try {
         const res = await fetch("/api/reports/export");
@@ -1317,7 +1561,6 @@ async function generateReport() {
             if (output) output.textContent = JSON.stringify(data, null, 2);
         }
 
-        // Trigger safe client-side download via Blob URL
         const jsonBlob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
         const blobUrl = URL.createObjectURL(jsonBlob);
         const a = document.createElement("a");
@@ -1554,3 +1797,12 @@ function generateLocalAnalyticsData(range) {
         ]
     };
 }
+
+window.loadInvestigations = loadInvestigations;
+window.openNewInvestigationModal = openNewInvestigationModal;
+window.closeModal = closeModal;
+window.openNewDeviceModal = openNewDeviceModal;
+window.closeDeviceModal = closeDeviceModal;
+window.handleCreateDevice = handleCreateDevice;
+window.generateReport = generateReport;
+window.toggleReportPreview = toggleReportPreview;
