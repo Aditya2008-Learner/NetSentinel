@@ -31,7 +31,7 @@
     if (!canvas || !canvas.getContext) return;
 
     var ctx = canvas.getContext("2d");
-    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var dpr = 1;
     var width = 0;
     var height = 0;
@@ -40,7 +40,7 @@
     var edges = [];
     var particles = [];
     var events = [];
-    var raf = 0;
+    let rafId = 0;
 
     var labels = ["GATEWAY", "SENSOR", "ANALYSIS", "SERVER", "ENDPOINT"];
     var badges = ["FLOW OK", "PORT SCAN BLOCKED", "SHA-256 VERIFIED"];
@@ -49,7 +49,7 @@
         return min + Math.random() * (max - min);
     }
 
-    function resize() {
+    function resizeCanvas() {
         var rect = canvas.getBoundingClientRect();
         dpr = Math.min(window.devicePixelRatio || 1, 2);
         width = Math.max(1, rect.width);
@@ -57,7 +57,25 @@
         canvas.width = Math.floor(width * dpr);
         canvas.height = Math.floor(height * dpr);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function resize() {
+        resizeCanvas();
         buildGraph();
+    }
+
+    function initParticles() {
+        particles = [];
+        if (!reduced) {
+            var pCount = Math.min(edges.length, 14);
+            for (var p = 0; p < pCount; p++) {
+                particles.push({
+                    edge: p % edges.length,
+                    t: rand(0, 1),
+                    speed: rand(0.0016, 0.0034)
+                });
+            }
+        }
     }
 
     function buildGraph() {
@@ -99,17 +117,7 @@
             }
         }
 
-        particles = [];
-        if (!reduced) {
-            var pCount = Math.min(edges.length, 14);
-            for (var p = 0; p < pCount; p++) {
-                particles.push({
-                    edge: p % edges.length,
-                    t: rand(0, 1),
-                    speed: rand(0.0016, 0.0034)
-                });
-            }
-        }
+        initParticles();
         events = [];
     }
 
@@ -201,7 +209,11 @@
             ctx.strokeStyle = ev.text.indexOf("BLOCKED") >= 0 ? "rgba(245, 158, 11, 0.7)" : "rgba(34, 197, 94, 0.7)";
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.roundRect(x - w / 2, y - 14, w, 18, 4);
+            if (typeof ctx.roundRect === "function") {
+                ctx.roundRect(x - w / 2, y - 14, w, 18, 4);
+            } else {
+                ctx.rect(x - w / 2, y - 14, w, 18);
+            }
             ctx.fill();
             ctx.stroke();
             ctx.fillStyle = ev.text.indexOf("BLOCKED") >= 0 ? "#f59e0b" : "#22c55e";
@@ -210,7 +222,11 @@
         });
         events = events.filter(function (ev) { return ev.life > 0; });
 
-        if (!reduced) raf = window.requestAnimationFrame(drawFrame);
+        if (!reduced) rafId = window.requestAnimationFrame(animate);
+    }
+
+    function animate(time) {
+        drawFrame(time);
     }
 
     canvas.addEventListener("pointermove", function (event) {
@@ -223,9 +239,27 @@
         mouse.y = -9999;
     });
 
-    window.addEventListener("resize", function () {
-        resize();
-        if (reduced) drawFrame(0);
+    let resizeTimeout;
+    window.addEventListener("resize", () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            resizeCanvas();
+            buildGraph();
+            if (reduced) drawFrame(0);
+        }, 150);
+    });
+
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    motionQuery.addEventListener("change", (e) => {
+        reduced = e.matches;
+        if (reduced) {
+            particles = [];
+            if (rafId) cancelAnimationFrame(rafId);
+            drawFrame(0);
+        } else {
+            initParticles();
+            rafId = requestAnimationFrame(animate);
+        }
     });
 
     resize();

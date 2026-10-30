@@ -590,6 +590,9 @@ def test_landing_page_serves_landing_html():
     response = client.get("/")
     assert response.status_code == 200
     assert "See Everything. Secure What Matters." in response.text
+    assert "Intelligent visibility for network security." in response.text
+    assert "Open Dashboard" in response.text
+    assert "DEMO ENVIRONMENT" in response.text
     assert "Explore Dashboard" in response.text
     assert "Discover Capabilities" in response.text
     assert "network-canvas" in response.text
