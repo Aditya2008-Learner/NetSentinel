@@ -48,13 +48,13 @@
     <div class="app-container">
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
-            <div class="brand-area">
+            <a href="/" class="brand-area" style="text-decoration: none; display: flex; align-items: center; gap: 12px; color: inherit;" title="Return to Net Sentinel Landing Page">
                 <i class="fa-solid fa-shield-halved brand-icon"></i>
                 <div class="brand-text">
                     <h2>Net Sentinel</h2>
                     <span>Security & Forensics</span>
                 </div>
-            </div>
+            </a>
 
             <nav class="nav-menu">
                 <a href="#" class="nav-item active" data-target="overview-view">
@@ -90,6 +90,10 @@
             </nav>
 
             <div class="sidebar-footer">
+                <a href="/" class="sidebar-home-link" style="display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px; text-decoration: none; padding: 6px 8px; border-radius: 6px; transition: all 0.2s; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);" onmouseover="this.style.color='#10b981'; this.style.borderColor='rgba(16,185,129,0.3)';" onmouseout="this.style.color='var(--text-muted)'; this.style.borderColor='var(--border-color)';">
+                    <i class="fa-solid fa-arrow-left" style="font-size: 0.75rem;"></i>
+                    <span>Product Overview</span>
+                </a>
                 <div class="status-badge demo-badge">
                     <i class="fa-solid fa-circle"></i> Demo Mode Active
                 </div>
@@ -100,7 +104,9 @@
         <main class="main-content">
             <!-- Top Navigation Bar -->
             <header class="top-nav">
-                <div class="breadcrumb">
+                <div class="breadcrumb" style="display: flex; align-items: center; gap: 8px;">
+                    <a href="/" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; transition: color 0.2s;" title="Return to Landing Page" onmouseover="this.style.color='#10b981'" onmouseout="this.style.color='var(--text-muted)'"><i class="fa-solid fa-house"></i></a>
+                    <span style="color: var(--border-color); font-size: 0.8rem;">/</span>
                     <span id="current-page-title">Overview Dashboard</span>
                 </div>
                 <div class="top-nav-right">

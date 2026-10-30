@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Net Sentinel — Network Intelligence, Threat Detection, Digital Forensics</title>
+    <meta name="description" content="Net Sentinel is a unified cybersecurity and digital forensics workspace for network flow telemetry, heuristic threat detection, LSB steganography, and SHA-256 integrity verification." />
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+    <link rel="stylesheet" href="/static/landing.css?v=1.0" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+    <a class="skip-link" href="#overview">Skip to content</a>
+
+    <header class="landing-header">
+        <div class="header-inner">
+            <a class="brand" href="#overview" aria-label="Net Sentinel home">
+                <i class="fa-solid fa-shield-halved brand-mark" aria-hidden="true"></i>
+                <span class="brand-word">Net Sentinel</span>
+                <span class="brand-badge">ENTERPRISE SOC</span>
+            </a>
+
+            <nav class="desktop-nav" aria-label="Primary">
+                <a href="#overview">Product</a>
+                <a href="#capabilities">Capabilities</a>
+                <a href="#workflow">How It Works</a>
+                <a href="#security">Security &amp; Specs</a>
+                <a href="#about">About</a>
+            </nav>
+
+            <div class="header-actions">
+                <a href="/dashboard" class="btn btn-primary-landing header-cta">
+                    Launch Dashboard
+                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                </a>
+                <button type="button" class="menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="mobile-drawer" aria-label="Open menu">
+                    <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+
+        <nav class="mobile-drawer" id="mobile-drawer" hidden>
+            <a href="#overview">Product</a>
+            <a href="#capabilities">Capabilities</a>
+            <a href="#workflow">How It Works</a>
+            <a href="#security">Security &amp; Specs</a>
+            <a href="#about">About</a>
+            <a href="/dashboard" class="btn btn-primary-landing">
+                Launch Dashboard
+                <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+            </a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero-section" id="overview">
+            <div class="hero-copy">
+                <span class="hero-badge"><i class="fa-solid fa-circle-nodes" aria-hidden="true"></i> Unified Cybersecurity &amp; Forensics Platform</span>
+                <h1>See Everything. Secure What Matters.</h1>
+                <p class="hero-subtitle">Gain deeper visibility into network activity, investigate suspicious behavior, and manage security operations from one unified workspace.</p>
+                <div class="hero-actions">
+                    <a href="/dashboard" class="btn btn-primary-landing"><i class="fa-solid fa-shield" aria-hidden="true"></i> Explore Dashboard</a>
+                    <a href="#capabilities" class="btn btn-secondary-landing"><i class="fa-solid fa-compass" aria-hidden="true"></i> Discover Capabilities</a>
+                </div>
+                <ul class="trust-bar">
+                    <li>5 Detection Heuristics</li>
+                    <li>LSB Forensics Lab</li>
+                    <li>Zero Kernel Drivers</li>
+                    <li>Standalone &amp; Serverless Ready</li>
+                </ul>
+            </div>
+            <div class="hero-canvas-wrap">
+                <canvas id="network-canvas" class="hero-network-canvas" aria-label="Animated network topology of gateways, sensors, analysis nodes, and servers" role="img"></canvas>
+            </div>
+        </section>
+
+        <section class="preview-section" aria-labelledby="preview-title">
+            <div class="section-heading">
+                <p class="eyebrow">ENGINEERED FOR THE FRONT LINE</p>
+                <h2 id="preview-title">Operational Visibility in Action</h2>
+            </div>
+
+            <div class="browser-frame">
+                <div class="browser-chrome">
+                    <div class="window-dots" aria-hidden="true">
+                        <span class="dot dot-red"></span>
+                        <span class="dot dot-yellow"></span>
+                        <span class="dot dot-green"></span>
+                    </div>
+                    <div class="address-pill">https://net-sentinel.internal/dashboard</div>
+                    <div class="live-pill"><span class="live-dot" aria-hidden="true"></span> DEMO ENVIRONMENT • STANDALONE AGENT CAPABILITIES</div>
+                </div>
+
+                <div class="preview-body">
+                    <div class="preview-metrics">
+                        <article class="preview-metric">
+                            <span>Investigations</span>
+                            <strong>4 Active Cases</strong>
+                        </article>
+                        <article class="preview-metric">
+                            <span>Tracked Devices</span>
+                            <strong>12 Observed Endpoints</strong>
+                        </article>
+                        <article class="preview-metric">
+                            <span>Integrity Baselines</span>
+                            <strong>28 Verified Hashes</strong>
+                        </article>
+                        <article class="preview-metric">
+                            <span>Active Alerts</span>
+                            <strong>3 Heuristic Detections</strong>
+                        </article>
+                    </div>
+
+                    <div class="preview-columns">
+                        <article class="preview-panel">
+                            <header class="panel-head">
+                                <h3>Network Telemetry</h3>
+                                <div class="legend">
+                                    <span><i class="swatch inbound"></i> Inbound</span>
+                                    <span><i class="swatch outbound"></i> Outbound</span>
+                                </div>
+                            </header>
+                            <svg class="area-chart" viewBox="0 0 640 180" role="img" aria-label="Inbound and outbound bandwidth area chart">
+                                <defs>
+                                    <linearGradient id="inFill" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#16a34a" stop-opacity="0.35" />
+                                        <stop offset="100%" stop-color="#16a34a" stop-opacity="0" />
+                                    </linearGradient>
+                                    <linearGradient id="outFill" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.28" />
+                                        <stop offset="100%" stop-color="#38bdf8" stop-opacity="0" />
+                                    </linearGradient>
+                                </defs>
+                                <g class="grid-lines" stroke="#1a243b">
+                                    <line x1="0" y1="30" x2="640" y2="30" />
+                                    <line x1="0" y1="75" x2="640" y2="75" />
+                                    <line x1="0" y1="120" x2="640" y2="120" />
+                                </g>
+                                <path fill="url(#outFill)" d="M0,120 C40,118 70,100 110,104 C150,108 180,90 220,86 C270,80 300,96 350,88 C400,80 430,70 480,76 C530,82 570,64 640,58 L640,180 L0,180 Z" />
+                                <path fill="none" stroke="#38bdf8" stroke-width="2" d="M0,120 C40,118 70,100 110,104 C150,108 180,90 220,86 C270,80 300,96 350,88 C400,80 430,70 480,76 C530,82 570,64 640,58" />
+                                <path fill="url(#inFill)" d="M0,140 C50,136 80,110 130,100 C180,90 210,70 260,62 C310,54 340,48 390,40 C440,32 470,46 520,38 C560,32 600,28 640,22 L640,180 L0,180 Z" />
+                                <path fill="none" stroke="#22c55e" stroke-width="2" d="M0,140 C50,136 80,110 130,100 C180,90 210,70 260,62 C310,54 340,48 390,40 C440,32 470,46 520,38 C560,32 600,28 640,22" />
+                            </svg>
+                            <div class="chart-stats">
+                                <span>Peak throughput <strong>45.8 Mbps</strong></span>
+                                <span>Latency <strong>18.4 ms</strong></span>
+                            </div>
+                        </article>
+
+                        <article class="preview-panel">
+                            <header class="panel-head">
+                                <h3>Live Heuristic Detection Feed</h3>
+                            </header>
+                            <ul class="detection-feed">
+                                <li>
+                                    <div>
+                                        <strong>Port Scan</strong>
+                                        <code>192.168.1.55 → 10.0.0.99</code>
+                                        <em>8 distinct ports</em>
+                                    </div>
+                                    <span class="sev sev-high">HIGH</span>
+                                </li>
+                                <li>
+                                    <div>
+                                        <strong>Brute Force SSH</strong>
+                                        <code>203.0.113.5 → 10.0.0.15</code>
+                                        <em>7 failed attempts</em>
+                                    </div>
+                                    <span class="sev sev-high">HIGH</span>
+                                </li>
+                                <li>
+                                    <div>
+                                        <strong>Source Traffic Burst</strong>
+                                        <code>192.168.1.20 → 10.0.0.6</code>
+                                        <em>12 connections/min</em>
+                                    </div>
+                                    <span class="sev sev-med">MEDIUM</span>
+                                </li>
+                            </ul>
+                        </article>
+                    </div>
+
+                    <div class="quick-tools">
+                        <span class="tools-label">Quick Tools</span>
+                        <span>Embed Secret</span>
+                        <span>Extract Secret</span>
+                        <span>Analyze Image</span>
+                        <span>Verify Integrity</span>
+                    </div>
+
+                    <a href="/dashboard" class="preview-launch-btn"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open Live Interactive Workspace</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="capabilities-section" id="capabilities" aria-labelledby="capabilities-title">
+            <div class="section-heading">
+                <p class="eyebrow">CORE CAPABILITIES</p>
+                <h2 id="capabilities-title">Comprehensive Security Architecture</h2>
+            </div>
+            <div class="capability-grid">
+                <article class="feature-card">
+                    <div class="feature-icon"><i class="fa-solid fa-network-wired" aria-hidden="true"></i></div>
+                    <h3>Network Monitoring</h3>
+                    <p>Ingest connection flows and IP telemetry CSV exports. Observe real-time bandwidth, packet velocity, and bidirectional flow rates with zero kernel-driver dependencies.</p>
+                    <ul class="spec-tags">
+                        <li>Flow Telemetry</li>
+                        <li>Delimited Logs</li>
+                        <li>Non-Invasive</li>
+                    </ul>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-icon"><i class="fa-solid fa-shield-virus" aria-hidden="true"></i></div>
+                    <h3>Threat Analysis</h3>
+                    <p>Heuristic threat engine detects port scanning, volumetric destination floods, SSH/RDP brute-force campaigns, and large data transfers with explainable context and recommended actions.</p>
+                    <ul class="spec-tags">
+                        <li>Explainable AI</li>
+                        <li>Threshold Heuristics</li>
+                        <li>Auto-Deduplication</li>
+                    </ul>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-icon"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i></div>
+                    <h3>Digital Forensics</h3>
+                    <p>Dedicated Steganography Lab for Least Significant Bit (LSB) message embedding, covert extraction, and image entropy variance analysis to identify anomalous pixel distributions.</p>
+                    <ul class="spec-tags">
+                        <li>LSB Steganography</li>
+                        <li>Entropy Variance</li>
+                        <li>Pillow Engine</li>
+                    </ul>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-icon"><i class="fa-solid fa-fingerprint" aria-hidden="true"></i></div>
+                    <h3>File Integrity Verification</h3>
+                    <p>Compute cryptographic SHA-256 hashes, benchmark files against baseline registries, and maintain tamper-evident audit records across all digital investigation cases.</p>
+                    <ul class="spec-tags">
+                        <li>SHA-256 Hashing</li>
+                        <li>Baseline Comparison</li>
+                        <li>Audit Registry</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="workflow-section" id="workflow" aria-labelledby="workflow-title">
+            <div class="section-heading">
+                <p class="eyebrow">METHODOLOGY</p>
+                <h2 id="workflow-title">Three Steps from Ingestion to Investigation</h2>
+            </div>
+            <ol class="workflow-steps">
+                <li>
+                    <span class="step-num">01</span>
+                    <h3>Monitor</h3>
+                    <p>Ingest network flow logs via standard CSV formats or stream deterministic synthetic telemetry across tracked gateway and endpoint devices.</p>
+                </li>
+                <li>
+                    <span class="step-num">02</span>
+                    <h3>Analyze</h3>
+                    <p>Correlate connections across time windows to detect scanning behaviors, authentication attacks, and covert payload indicators without false-positive bloat.</p>
+                </li>
+                <li>
+                    <span class="step-num">03</span>
+                    <h3>Respond</h3>
+                    <p>Open structured digital investigation cases, inspect device inventory records, and export comprehensive JSON reports for incident response.</p>
+                </li>
+            </ol>
+        </section>
+
+        <section class="security-section" id="security" aria-labelledby="security-title">
+            <div class="section-heading">
+                <p class="eyebrow">SECURITY &amp; SPECS</p>
+                <h2 id="security-title">Built for Defensible Operations</h2>
+            </div>
+            <div class="security-grid">
+                <article class="security-card">
+                    <h3>Enterprise Defense-in-Depth</h3>
+                    <ul>
+                        <li>Strict Content Security Policy (CSP) and nosniff headers.</li>
+                        <li>Parameterized SQLite persistence with transaction boundaries.</li>
+                        <li>Chunked streaming upload safeguards (15 MB caps).</li>
+                        <li>Ephemeral serverless execution: covert payloads returned as base64 without leaking customer data to persistent shared disk.</li>
+                    </ul>
+                </article>
+                <article class="security-card">
+                    <h3>Academic &amp; Operational Framework (SDG Alignment)</h3>
+                    <ul>
+                        <li><strong>SDG 9</strong>: Industry, Innovation, and Infrastructure through accessible, lightweight cybersecurity tools.</li>
+                        <li><strong>SDG 16</strong>: Peace, Justice, and Strong Institutions through verifiable digital forensics, transparent evidence hashing, and chain-of-custody tracking.</li>
+                        <li>Designed for university IDEATHON 2026 and enterprise security operations centers.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="final-cta-section">
+            <h2>Take control of your network visibility.</h2>
+            <p>Experience the unified cybersecurity and digital forensics workspace designed for operational and academic environments.</p>
+            <a href="/dashboard" class="btn btn-primary-landing btn-lg"><i class="fa-solid fa-rocket" aria-hidden="true"></i> Launch Net Sentinel</a>
+        </section>
+    </main>
+
+    <footer class="landing-footer" id="about">
+        <div class="footer-grid">
+            <div>
+                <a class="brand footer-brand" href="#overview">
+                    <i class="fa-solid fa-shield-halved brand-mark" aria-hidden="true"></i>
+                    <span class="brand-word">Net Sentinel</span>
+                </a>
+                <p class="tagline">Network Intelligence. Threat Detection. Digital Forensics.</p>
+            </div>
+            <div>
+                <h3>Navigation</h3>
+                <ul>
+                    <li><a href="/dashboard">Dashboard</a></li>
+                    <li><a href="/dashboard">Security Analytics</a></li>
+                    <li><a href="/dashboard">Network Analysis</a></li>
+                    <li><a href="/dashboard">Forensics Lab</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3>Platform &amp; Docs</h3>
+                <ul>
+                    <li><a href="/docs">Interactive API Docs</a></li>
+                    <li><a href="/healthz">Health Probe</a></li>
+                    <li><a href="/api/network/sample">Sample CSV Data</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3>Technology &amp; Architecture</h3>
+                <ul>
+                    <li>FastAPI 1.0</li>
+                    <li>SQLite WAL</li>
+                    <li>Pillow</li>
+                    <li>HTML5 Canvas</li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bar">
+            <span>&copy; 2026 Net Sentinel</span>
+            <span>Built for authorized security research, monitoring, and digital forensic analysis.</span>
+        </div>
+    </footer>
+
+    <script src="/static/landing.js?v=1.0"></script>
+</body>
+</html>

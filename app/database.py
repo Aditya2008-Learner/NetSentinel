@@ -101,6 +101,7 @@ def get_db_connection() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     is_new = not DB_PATH.exists()
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
     if is_new:
         init_db_conn(conn)

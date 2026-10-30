@@ -156,8 +156,18 @@ async def healthz():
 
 
 @app.get("/", response_class=HTMLResponse)
+async def landing_page(request: Request):
+    template_name = "landing.html" if (TEMPLATES_DIR / "landing.html").is_file() else "index.html"
+    return templates.TemplateResponse(
+        request,
+        template_name,
+        {},
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_spa(request: Request):
-    """Serve the single-page Net Sentinel security dashboard."""
     return templates.TemplateResponse(
         request,
         "index.html",
