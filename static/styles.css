@@ -1346,3 +1346,235 @@ input[type="file"]::-webkit-file-upload-button:hover {
         padding: 20px 16px;
     }
 }
+
+.sileo-toaster,
+#sileo-toaster {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 10000;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: calc(100vw - 32px);
+}
+
+.sileo-toast {
+    pointer-events: auto;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 300px;
+    max-width: 440px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px -4px rgba(2, 6, 23, 0.7), 0 4px 12px rgba(0, 0, 0, 0.4);
+    color: #f8fafc;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 12px 14px;
+    overflow: hidden;
+    box-sizing: border-box;
+    animation: sileo-enter 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.sileo-toast-success {
+    border-color: rgba(16, 185, 129, 0.24);
+}
+
+.sileo-toast-error {
+    border-color: rgba(244, 63, 94, 0.24);
+}
+
+.sileo-toast-warning {
+    border-color: rgba(245, 158, 11, 0.24);
+}
+
+.sileo-toast-info {
+    border-color: rgba(56, 189, 248, 0.24);
+}
+
+@keyframes sileo-enter {
+    0% {
+        opacity: 0;
+        transform: translateY(-24px) scale(0.92);
+    }
+    60% {
+        opacity: 1;
+        transform: translateY(4px) scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes sileo-exit {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+        max-height: 120px;
+        margin-bottom: 0;
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.92) translateY(-10px);
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-bottom: -10px;
+    }
+}
+
+.sileo-toast-leaving {
+    animation: sileo-exit 0.28s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+    pointer-events: none;
+}
+
+.sileo-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.sileo-toast-success .sileo-icon {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.sileo-toast-error .sileo-icon {
+    background: rgba(244, 63, 94, 0.15);
+    color: #f43f5e;
+}
+
+.sileo-toast-warning .sileo-icon {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.sileo-toast-info .sileo-icon {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+}
+
+.sileo-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sileo-title {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #f8fafc;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.sileo-description {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.sileo-description:only-child {
+    font-size: 0.86rem;
+    color: #f8fafc;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.sileo-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    opacity: 0.5;
+    padding: 6px;
+    margin-left: auto;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    line-height: 1;
+}
+
+.sileo-close:hover {
+    opacity: 1;
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.sileo-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #38bdf8;
+    transform-origin: left center;
+    animation: sileo-progress linear forwards;
+}
+
+@keyframes sileo-progress {
+    0% {
+        transform: scaleX(1);
+    }
+    100% {
+        transform: scaleX(0);
+    }
+}
+
+.sileo-toast:hover .sileo-progress {
+    animation-play-state: paused;
+}
+
+.sileo-toast-success .sileo-progress {
+    background: #10b981;
+}
+
+.sileo-toast-error .sileo-progress {
+    background: #f43f5e;
+}
+
+.sileo-toast-warning .sileo-progress {
+    background: #f59e0b;
+}
+
+.sileo-toast-info .sileo-progress {
+    background: #38bdf8;
+}
+
+@media (max-width: 640px) {
+    .sileo-toaster,
+    #sileo-toaster {
+        top: 16px;
+        right: 16px;
+        left: 16px;
+        align-items: stretch;
+        max-width: none;
+    }
+
+    .sileo-toast {
+        min-width: 0;
+        max-width: 100%;
+        width: 100%;
+    }
+}

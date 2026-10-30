@@ -1205,56 +1205,210 @@ function initForms() {
     }
 }
 
-// Notification system
-function showNotification(message, type = "info") {
-    const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
-    notification.style.position = 'fixed';
-    notification.style.top = '24px';
-    notification.style.right = '24px';
-    notification.style.padding = '12px 20px';
-    notification.style.borderRadius = '8px';
-    notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-    notification.style.zIndex = '1001';
-    notification.style.backgroundColor = type === 'success' ? '#10b981' : type === 'warning' ? '#f59e0b' : '#ef4444';
-    notification.style.color = '#ffffff';
-    notification.style.fontFamily = 'Inter, sans-serif';
-    notification.style.fontSize = '0.875rem';
-    notification.style.fontWeight = '500';
-    notification.textContent = message;
-    document.body.appendChild(notification);
+const sileo = (function() {
+    const DEFAULT_DURATION = 4000;
+    const MAX_STACK = 5;
 
-    setTimeout(() => {
-        notification.style.opacity = '0';
-        notification.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    const DEFAULT_ICONS = {
+        success: 'fa-solid fa-circle-check',
+        error: 'fa-solid fa-circle-xmark',
+        warning: 'fa-solid fa-triangle-exclamation',
+        info: 'fa-solid fa-circle-info'
+    };
+
+    function getToaster() {
+        let toaster = document.getElementById('sileo-toaster');
+        if (!toaster) {
+            toaster = document.createElement('div');
+            toaster.id = 'sileo-toaster';
+            toaster.className = 'sileo-toaster';
+            toaster.setAttribute('role', 'region');
+            toaster.setAttribute('aria-label', 'Notifications');
+            (document.body || document.documentElement).appendChild(toaster);
+        }
+        return toaster;
+    }
+
+    function dismissToast(toast) {
+        if (!toast || toast.classList.contains('sileo-toast-leaving')) return;
+        if (toast._sileoTimer) {
+            clearTimeout(toast._sileoTimer);
+            toast._sileoTimer = null;
+        }
+        toast.classList.add('sileo-toast-leaving');
+        let cleaned = false;
+        const cleanup = (e) => {
+            if (e && (e.target !== toast || e.animationName !== 'sileo-exit')) return;
+            if (cleaned) return;
+            cleaned = true;
+            toast.removeEventListener('animationend', cleanup);
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        };
+        toast.addEventListener('animationend', cleanup);
+        setTimeout(cleanup, 320);
+    }
+
+    function show(options = {}) {
+        const config = typeof options === 'string' ? { message: options } : (options || {});
+        let type = String(config.type || 'info').toLowerCase();
+        if (type === 'danger') type = 'error';
+        if (type === 'warn') type = 'warning';
+        if (!DEFAULT_ICONS[type]) type = 'info';
+
+        const rawTitle = config.title ? String(config.title) : '';
+        let rawDesc = config.description ? String(config.description) : '';
+        if (!rawDesc && config.message) {
+            rawDesc = String(config.message);
+        }
+
+        const duration = typeof config.duration === 'number' ? config.duration : DEFAULT_DURATION;
+        const dismissible = config.dismissible !== false;
+        const id = config.id || ('sileo-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
+
+        const toaster = getToaster();
+        const activeToasts = Array.from(toaster.querySelectorAll('.sileo-toast:not(.sileo-toast-leaving)'));
+        if (activeToasts.length >= MAX_STACK) {
+            const evictCount = activeToasts.length - MAX_STACK + 1;
+            for (let i = 0; i < evictCount; i++) {
+                dismissToast(activeToasts[i]);
+            }
+        }
+
+        const toast = document.createElement('div');
+        toast.id = id;
+        toast.dataset.sileoId = id;
+        toast.className = `sileo-toast sileo-toast-${type}`;
+        toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        toast.setAttribute('aria-atomic', 'true');
+
+        let iconMarkup = '';
+        if (config.icon !== false) {
+            const iconClass = config.icon || DEFAULT_ICONS[type] || DEFAULT_ICONS.info;
+            iconMarkup = `<div class="sileo-icon"><i class="${escapeHtml(iconClass)}"></i></div>`;
+        }
+
+        let contentMarkup = '<div class="sileo-content">';
+        if (rawTitle) {
+            contentMarkup += `<div class="sileo-title">${escapeHtml(rawTitle)}</div>`;
+        }
+        if (rawDesc) {
+            contentMarkup += `<div class="sileo-description">${escapeHtml(rawDesc)}</div>`;
+        }
+        contentMarkup += '</div>';
+
+        let closeMarkup = '';
+        if (dismissible) {
+            closeMarkup = `<button type="button" class="sileo-close" aria-label="Close notification"><i class="fa-solid fa-xmark"></i></button>`;
+        }
+
+        let progressMarkup = '';
+        if (duration > 0 && duration !== Infinity) {
+            progressMarkup = `<div class="sileo-progress" style="animation-duration: ${duration}ms;"></div>`;
+        }
+
+        toast.innerHTML = `${iconMarkup}${contentMarkup}${closeMarkup}${progressMarkup}`;
+
+        if (dismissible) {
+            const closeBtn = toast.querySelector('.sileo-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    dismissToast(toast);
+                });
+            }
+        }
+
+        let remaining = duration;
+        let startTimestamp = Date.now();
+        let timer = null;
+
+        const startTimer = () => {
+            if (duration > 0 && duration !== Infinity) {
+                startTimestamp = Date.now();
+                timer = setTimeout(() => {
+                    dismissToast(toast);
+                }, remaining);
+                toast._sileoTimer = timer;
+            }
+        };
+
+        const pauseTimer = () => {
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+                toast._sileoTimer = null;
+                remaining -= Date.now() - startTimestamp;
+                if (remaining < 50) remaining = 50;
+            }
+        };
+
+        startTimer();
+
+        toast.addEventListener('mouseenter', pauseTimer);
+        toast.addEventListener('mouseleave', () => {
+            if (!toast.classList.contains('sileo-toast-leaving')) {
+                startTimer();
+            }
+        });
+
+        toaster.appendChild(toast);
+        return id;
+    }
+
+    function normalizeArgs(messageOrOpts, defaultType) {
+        if (typeof messageOrOpts === 'string') {
+            return { message: messageOrOpts, type: defaultType };
+        }
+        return { type: defaultType, ...messageOrOpts };
+    }
+
+    function dismiss(id) {
+        if (!id) return;
+        const toast = typeof id === 'string'
+            ? document.getElementById(id) || document.querySelector(`[data-sileo-id="${id}"]`)
+            : id;
+        if (toast) {
+            dismissToast(toast);
+        }
+    }
+
+    function clear() {
+        const toaster = document.getElementById('sileo-toaster');
+        if (!toaster) return;
+        const toasts = Array.from(toaster.querySelectorAll('.sileo-toast:not(.sileo-toast-leaving)'));
+        toasts.forEach(dismissToast);
+    }
+
+    return {
+        show,
+        success(messageOrOpts) {
+            return show(normalizeArgs(messageOrOpts, 'success'));
+        },
+        error(messageOrOpts) {
+            return show(normalizeArgs(messageOrOpts, 'error'));
+        },
+        warning(messageOrOpts) {
+            return show(normalizeArgs(messageOrOpts, 'warning'));
+        },
+        info(messageOrOpts) {
+            return show(normalizeArgs(messageOrOpts, 'info'));
+        },
+        dismiss,
+        clear
+    };
+})();
+
+window.sileo = sileo;
+
+function showNotification(message, type = "info", options = {}) {
+    const opts = typeof options === 'object' && options !== null ? options : {};
+    return sileo.show({ message, type, ...opts });
 }
 
 function showNetworkError() {
-    const notification = document.createElement('div');
-    notification.className = 'notification notification-error';
-    notification.style.cssText = `
-        position: fixed;
-        top: 24px;
-        right: 24px;
-        padding: 12px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        z-index: 1001;
-        background-color: #ef4444;
-        color: #ffffff;
-        font-family: Inter, sans-serif;
-        font-size: 0.875rem;
-        font-weight: 500;
-    `;
-    notification.textContent = 'Network analysis request failed';
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-        notification.style.opacity = '0';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    showNotification('Network analysis request failed', 'error');
 }
 
 function updateTelemetryTimeAxis(range) {
