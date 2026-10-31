@@ -114,10 +114,60 @@ function switchView(targetId) {
             loadDevices();
         } else if (targetId === "network-view") {
             loadAnalysisHistory();
+        } else if (targetId === "live-collector-view") {
+            loadLiveCollectorData();
         }
 }
 
-// Load overview metrics from API
+async function loadLiveCollectorData() {
+    try {
+        const res = await fetch("/api/collector/status");
+        if (!res.ok) throw new Error("Failed to load live collector status");
+        const data = await res.json();
+        
+        const collector = data.collector || {};
+        const badgeEl = document.getElementById("live-status-badge");
+        const ifaceEl = document.getElementById("live-interface-name");
+        const packetsEl = document.getElementById("live-packets-count");
+        const bytesEl = document.getElementById("live-bytes-count");
+        const tbody = document.getElementById("live-flows-tbody");
+
+        if (badgeEl) {
+            const isLive = collector.status === "LIVE";
+            badgeEl.innerHTML = isLive 
+                ? '<span class="badge badge-success"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 4px;"></i> LIVE</span>'
+                : '<span class="badge badge-warning">DISCONNECTED</span>';
+        }
+
+        if (ifaceEl) ifaceEl.textContent = collector.interface || "None";
+        if (packetsEl) packetsEl.textContent = (collector.packets_observed || 0).toLocaleString();
+        if (bytesEl) {
+            const kb = (collector.bytes_observed || 0) / 1024;
+            bytesEl.textContent = kb > 1024 ? (kb / 1024).toFixed(2) + " MB" : kb.toFixed(1) + " KB";
+        }
+
+        if (tbody) {
+            const flows = data.flows || [];
+            if (flows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 24px;">No live flows recorded. Start the collector agent to begin streaming.</td></tr>`;
+            } else {
+                tbody.innerHTML = flows.map(f => `
+                    <tr>
+                        <td>${escapeHtml(f.timestamp || "N/A")}</td>
+                        <td><code>${escapeHtml(f.src_ip || "-")}</code></td>
+                        <td><code>${escapeHtml(f.dst_ip || "-")}</code></td>
+                        <td><code>${escapeHtml(f.src_port || "-")} → ${escapeHtml(f.dst_port || "-")}</code></td>
+                        <td><span class="badge badge-info">${escapeHtml(f.protocol || "TCP")}</span></td>
+                        <td>${escapeHtml(f.packets || 1)}</td>
+                        <td>${escapeHtml(f.bytes || 0)} B</td>
+                    </tr>
+                `).join("");
+            }
+        }
+    } catch (err) {
+        console.error("Failed to load live collector data", err);
+    }
+}
 async function loadOverviewData() {
     try {
         const res = await fetch("/api/overview");

@@ -77,6 +77,46 @@ def init_db_conn(conn: sqlite3.Connection) -> None:
         """
     )
 
+    # Live network flows table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS live_flows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            src_ip TEXT,
+            dst_ip TEXT,
+            src_port INTEGER,
+            dst_port INTEGER,
+            protocol TEXT,
+            packets INTEGER,
+            bytes INTEGER,
+            first_seen TEXT,
+            last_seen TEXT,
+            received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    # Collector status table
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS collector_status (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            status TEXT DEFAULT 'DISCONNECTED',
+            interface TEXT,
+            last_heartbeat TIMESTAMP,
+            packets_observed INTEGER DEFAULT 0,
+            bytes_observed INTEGER DEFAULT 0
+        )
+        """
+    )
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO collector_status (id, status, interface, last_heartbeat, packets_observed, bytes_observed)
+        VALUES (1, 'DISCONNECTED', 'None', CURRENT_TIMESTAMP, 0, 0)
+        """
+    )
+
     cursor.execute("SELECT COUNT(*) FROM devices")
     if cursor.fetchone()[0] == 0:
         cursor.execute(

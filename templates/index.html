@@ -66,6 +66,9 @@
                 <a href="#" class="nav-item" data-target="network-view">
                     <i class="fa-solid fa-network-wired"></i> Network Security
                 </a>
+                <a href="#" class="nav-item" data-target="live-collector-view">
+                    <i class="fa-solid fa-satellite-dish"></i> Live Monitoring
+                </a>
                 <a href="#" class="nav-item" data-target="devices-view">
                     <i class="fa-solid fa-laptop-code"></i> Device Inventory
                 </a>
@@ -474,7 +477,85 @@
                     </div>
                 </section>
 
-                <!-- 3. DEVICE INVENTORY VIEW -->
+                <!-- LIVE COLLECTOR MONITORING VIEW -->
+                <section id="live-collector-view" class="view-panel">
+                    <div class="section-header">
+                        <h2>Live Network Monitoring</h2>
+                        <p>Real-time packet metadata capture and flow aggregation from local Windows collector agent.</p>
+                        <div class="header-actions">
+                            <button class="btn btn-secondary" onclick="loadLiveCollectorData()"><i class="fa-solid fa-arrows-rotate"></i> Refresh Status</button>
+                        </div>
+                    </div>
+
+                    <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-satellite-dish"></i></div>
+                            <div class="metric-info">
+                                <span class="metric-label">Collector Status</span>
+                                <h3 id="live-status-badge"><span class="badge badge-warning">DISCONNECTED</span></h3>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-network-wired"></i></div>
+                            <div class="metric-info">
+                                <span class="metric-label">Active Interface</span>
+                                <h3 id="live-interface-name" style="font-size: 1.1rem; font-family: 'JetBrains Mono', monospace;">None</h3>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-chart-line"></i></div>
+                            <div class="metric-info">
+                                <span class="metric-label">Packets Observed</span>
+                                <h3 id="live-packets-count">0</h3>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon"><i class="fa-solid fa-database"></i></div>
+                            <div class="metric-info">
+                                <span class="metric-label">Bytes Observed</span>
+                                <h3 id="live-bytes-count">0 KB</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-bottom: 24px;">
+                        <h3><i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i> Collector Setup & Instructions</h3>
+                        <p style="color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 12px;">
+                            To stream live telemetry from your Windows computer into Net Sentinel:
+                        </p>
+                        <ol style="color: var(--text-secondary); font-size: 0.85rem; padding-left: 20px; line-height: 1.6;">
+                            <li>Ensure <strong>Npcap</strong> is installed on your Windows machine.</li>
+                            <li>Navigate to the <code>collector/</code> folder in the repository.</li>
+                            <li>Run <code>python main.py --list-interfaces</code> to view network adapters.</li>
+                            <li>Start monitoring with <code>python main.py --interface 0</code>.</li>
+                        </ol>
+                    </div>
+
+                    <div class="card">
+                        <h3><i class="fa-solid fa-list" style="color: var(--accent-sky);"></i> Live Network Flows (Captured Metadata)</h3>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px;">Real-time flow records received from the active Windows collector agent.</p>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp (UTC)</th>
+                                        <th>Source IP</th>
+                                        <th>Destination IP</th>
+                                        <th>Ports</th>
+                                        <th>Protocol</th>
+                                        <th>Packets</th>
+                                        <th>Bytes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="live-flows-tbody">
+                                    <tr>
+                                        <td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 24px;">No live flows recorded. Start the collector agent to begin streaming.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
                 <section id="devices-view" class="view-panel">
                     <div class="section-header">
                         <h2>Device & Host Inventory</h2>

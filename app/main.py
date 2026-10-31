@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import List, Literal, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -663,7 +663,113 @@ async def api_forensics_analyze(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-# --- Integrity Verification API ---
+# --- Live Collector Ingestion API ---
+COLLECTOR_API_KEY = os.environ.get("NET_SENTINEL_API_KEY", "ns-live-collector-secure-key-2026")
+
+def verify_collector_key(x_collector_key: Optional[str] = Header(None)):
+    if not x_collector_key or x_collector_key != COLLECTOR_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing collector API key")
+    return x_collector_key
+
+
+@app.post("/api/collector/events")
+@limiter.limit("60/minute")
+async def api_collector_events(request: Request, payload: dict, api_key: str = Depends(verify_collector_key)):
+    """Ingest batch flow telemetry from authorized Windows Live Network Collector."""
+    events = payload.get("events", [])
+    if not isinstance(events, list):
+        raise HTTPException(status_code=400, detail="Invalid payload: 'events' list expected")
+
+    if len(events) > 1000:
+        raise HTTPException(status_code=400, detail="Batch size exceeds maximum limit of 1000 events")
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        total_packets = 0
+        total_bytes = 0
+        last_iface = "Unknown"
+
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            ts = ev.get("timestamp") or datetime.utcnow().isoformat()
+            src_ip = str(ev.get("src_ip", "0.0.0.0")).strip()
+            dst_ip = str(ev.get("dst_ip", "0.0.0.0")).strip()
+            src_port = int(ev.get("src_port", 0))
+            dst_port = int(ev.get("dst_port", 0))
+            protocol = str(ev.get("protocol", "OTHER")).strip()
+            packets = int(ev.get("packets", 1))
+            b_count = int(ev.get("bytes", 0))
+            first_seen = ev.get("first_seen") or ts
+            last_seen = ev.get("last_seen") or ts
+            last_iface = ev.get("interface") or last_iface
+
+            total_packets += packets
+            total_bytes += b_count
+
+            cursor.execute(
+                """
+                INSERT INTO live_flows (timestamp, src_ip, dst_ip, src_port, dst_port, protocol, packets, bytes, first_seen, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ts, src_ip, dst_ip, src_port, dst_port, protocol, packets, b_count, first_seen, last_seen)
+            )
+
+        # Update collector status
+        cursor.execute(
+            """
+            UPDATE collector_status
+            SET status = 'LIVE', interface = ?, last_heartbeat = CURRENT_TIMESTAMP,
+                packets_observed = packets_observed + ?, bytes_observed = bytes_observed + ?
+            WHERE id = 1
+            """,
+            (last_iface, total_packets, total_bytes)
+        )
+        conn.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Collector ingestion error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error during event ingestion.")
+    finally:
+        conn.close()
+
+    return {"success": True, "processed": len(events)}
+
+
+@app.get("/api/collector/status")
+async def api_collector_status():
+    """Return live collector connection status, aggregated counts, and recent flows."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM collector_status WHERE id = 1")
+        row = cursor.fetchone()
+        status_data = dict(row) if row else {"status": "DISCONNECTED", "interface": "None", "packets_observed": 0, "bytes_observed": 0}
+
+        cursor.execute("SELECT * FROM live_flows ORDER BY id DESC LIMIT 50")
+        flows = [dict(r) for r in cursor.fetchall()]
+
+        # Compute top source IPs, destination IPs, and protocol distribution
+        cursor.execute("SELECT src_ip, SUM(packets) as total_packets FROM live_flows GROUP BY src_ip ORDER BY total_packets DESC LIMIT 5")
+        top_sources = [dict(r) for r in cursor.fetchall()]
+
+        cursor.execute("SELECT dst_ip, SUM(packets) as total_packets FROM live_flows GROUP BY dst_ip ORDER BY total_packets DESC LIMIT 5")
+        top_destinations = [dict(r) for r in cursor.fetchall()]
+
+        cursor.execute("SELECT protocol, COUNT(*) as count FROM live_flows GROUP BY protocol ORDER BY count DESC")
+        protocols = [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    return {
+        "collector": status_data,
+        "flows": flows,
+        "top_sources": top_sources,
+        "top_destinations": top_destinations,
+        "protocols": protocols
+    }
 @app.post("/api/integrity/verify")
 async def api_integrity_verify(
     file: UploadFile = File(...),
