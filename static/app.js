@@ -26,17 +26,81 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    initNavigation();
-    loadOverviewData();
-    loadInvestigations();
-    loadDevices();
-    loadAnalysisHistory();
-    initForms();
-    initTelemetryChart();
-    initGlobalSearch();
-    initModals();
-});
+    // Wire event listeners replacing inline HTML event attributes
+    const telemetryRangeEl = document.getElementById("telemetry-range");
+    if (telemetryRangeEl) telemetryRangeEl.addEventListener("change", loadTelemetryGraph);
+
+    const telemetryMetricEl = document.getElementById("telemetry-metric");
+    if (telemetryMetricEl) telemetryMetricEl.addEventListener("change", renderTelemetryChart);
+
+    const telemetryToggleBtn = document.getElementById("telemetry-toggle-btn");
+    if (telemetryToggleBtn) telemetryToggleBtn.addEventListener("click", toggleTelemetryLive);
+
+    const telemetryAttackBtn = document.getElementById("telemetry-attack-btn");
+    if (telemetryAttackBtn) telemetryAttackBtn.addEventListener("click", triggerAttackSimulation);
+
+    const telemetryResetBtn = document.getElementById("telemetry-reset-btn");
+    if (telemetryResetBtn) telemetryResetBtn.addEventListener("click", resetAttackSimulation);
+
+    document.querySelectorAll(".analytics-range-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const range = btn.getAttribute("data-range");
+            if (range) setAnalyticsRange(range);
+        });
+    });
+
+    const exportAnalyticsBtn = document.getElementById("export-analytics-btn");
+    if (exportAnalyticsBtn) exportAnalyticsBtn.addEventListener("click", exportAnalyticsReport);
+
+    const loadSampleCsvBtn = document.getElementById("load-sample-csv-btn");
+    if (loadSampleCsvBtn) loadSampleCsvBtn.addEventListener("click", loadSampleCsv);
+
+    const refreshHistoryBtn = document.getElementById("refresh-history-btn");
+    if (refreshHistoryBtn) refreshHistoryBtn.addEventListener("click", loadAnalysisHistory);
+
+    const refreshCollectorBtn = document.getElementById("refresh-collector-btn");
+    if (refreshCollectorBtn) refreshCollectorBtn.addEventListener("click", loadLiveCollectorData);
+
+    const refreshDevicesBtn = document.getElementById("refresh-devices-btn");
+    if (refreshDevicesBtn) refreshDevicesBtn.addEventListener("click", loadDevices);
+
+    const addDeviceModalBtn = document.getElementById("add-device-modal-btn");
+    if (addDeviceModalBtn) addDeviceModalBtn.addEventListener("click", openNewDeviceModal);
+
+    const refreshInvestigationsBtn = document.getElementById("refresh-investigations-btn");
+    if (refreshInvestigationsBtn) refreshInvestigationsBtn.addEventListener("click", loadInvestigations);
+
+    const addInvestigationModalBtn = document.getElementById("add-investigation-modal-btn");
+    if (addInvestigationModalBtn) addInvestigationModalBtn.addEventListener("click", openNewInvestigationModal);
+
+    const exportReportBtn = document.getElementById("export-report-btn");
+    if (exportReportBtn) exportReportBtn.addEventListener("click", generateReport);
+
+    const previewReportBtn = document.getElementById("preview-report-btn");
+    if (previewReportBtn) previewReportBtn.addEventListener("click", toggleReportPreview);
+
+    const closeInvestigationModalBtn = document.getElementById("close-investigation-modal-btn");
+    if (closeInvestigationModalBtn) closeInvestigationModalBtn.addEventListener("click", closeModal);
+
+    const cancelInvestigationModalBtn = document.getElementById("cancel-investigation-modal-btn");
+    if (cancelInvestigationModalBtn) cancelInvestigationModalBtn.addEventListener("click", closeModal);
+
+    const closeDeviceModalBtn = document.getElementById("close-device-modal-btn");
+    if (closeDeviceModalBtn) closeDeviceModalBtn.addEventListener("click", closeDeviceModal);
+
+    const cancelDeviceModalBtn = document.getElementById("cancel-device-modal-btn");
+    if (cancelDeviceModalBtn) cancelDeviceModalBtn.addEventListener("click", closeDeviceModal);
+
+    const newDeviceForm = document.getElementById("new-device-form");
+    if (newDeviceForm) newDeviceForm.addEventListener("submit", handleCreateDevice);
+
+    document.querySelectorAll("[data-action='switch-view']").forEach(el => {
+        el.addEventListener("click", (e) => {
+            e.preventDefault();
+            const target = el.getAttribute("data-target");
+            if (target) switchView(target);
+        });
+    });
 
 // Pause polling when the tab is hidden; resume when visible again.
 document.addEventListener("visibilitychange", () => {

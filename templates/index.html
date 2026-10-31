@@ -93,7 +93,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <a href="/" class="sidebar-home-link" style="display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px; text-decoration: none; padding: 6px 8px; border-radius: 6px; transition: all 0.2s; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);" onmouseover="this.style.color='#10b981'; this.style.borderColor='rgba(16,185,129,0.3)';" onmouseout="this.style.color='var(--text-muted)'; this.style.borderColor='var(--border-color)';">
+                <a href="/" class="sidebar-home-link" style="display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px; text-decoration: none; padding: 6px 8px; border-radius: 6px; transition: all 0.2s; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
                     <i class="fa-solid fa-arrow-left" style="font-size: 0.75rem;"></i>
                     <span>Product Overview</span>
                 </a>
@@ -108,7 +108,7 @@
             <!-- Top Navigation Bar -->
             <header class="top-nav">
                 <div class="breadcrumb" style="display: flex; align-items: center; gap: 8px;">
-                    <a href="/" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; transition: color 0.2s;" title="Return to Landing Page" onmouseover="this.style.color='#10b981'" onmouseout="this.style.color='var(--text-muted)'"><i class="fa-solid fa-house"></i></a>
+                    <a href="/" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; transition: color 0.2s;" title="Return to Landing Page"><i class="fa-solid fa-house"></i></a>
                     <span style="color: var(--border-color); font-size: 0.8rem;">/</span>
                     <span id="current-page-title">Overview Dashboard</span>
                 </div>
@@ -135,10 +135,10 @@
                             <p>Authorized security monitoring, explainable anomaly detection, steganography analysis, and file integrity verification for academic & operational environments.</p>
                         </div>
                         <div class="banner-actions">
-                            <button class="btn btn-primary" onclick="switchView('investigations-view')">
+                            <button class="btn btn-primary" data-action="switch-view" data-target="investigations-view">
                                 <i class="fa-solid fa-plus"></i> New Investigation
                             </button>
-                            <button class="btn btn-secondary" onclick="switchView('network-view')">
+                            <button class="btn btn-secondary" data-action="switch-view" data-target="network-view">
                                 <i class="fa-solid fa-shield"></i> Network Security
                             </button>
                         </div>
@@ -179,19 +179,19 @@
                         <div class="card">
                             <h2>Quick Tools</h2>
                             <div class="quick-tools-grid">
-                                <button class="tool-btn" onclick="switchView('stego-view')">
+                                <button class="tool-btn" data-action="switch-view" data-target="stego-view">
                                     <i class="fa-solid fa-eye-slash"></i>
                                     <span>Embed Secret</span>
                                 </button>
-                                <button class="tool-btn" onclick="switchView('stego-view')">
+                                <button class="tool-btn" data-action="switch-view" data-target="stego-view">
                                     <i class="fa-solid fa-key"></i>
                                     <span>Extract Secret</span>
                                 </button>
-                                <button class="tool-btn" onclick="switchView('forensics-view')">
+                                <button class="tool-btn" data-action="switch-view" data-target="forensics-view">
                                     <i class="fa-solid fa-magnifying-glass"></i>
                                     <span>Analyze Image</span>
                                 </button>
-                                <button class="tool-btn" onclick="switchView('integrity-view')">
+                                <button class="tool-btn" data-action="switch-view" data-target="integrity-view">
                                     <i class="fa-solid fa-fingerprint"></i>
                                     <span>Verify Integrity</span>
                                 </button>
@@ -214,18 +214,18 @@
                                 <p>Real-time throughput, packet rate, and latency observations (DEMO DATA).</p>
                             </div>
                             <div class="telemetry-controls-group">
-                                <select id="telemetry-range" class="telemetry-select" onchange="loadTelemetryGraph()">
+                                <select id="telemetry-range" class="telemetry-select">
                                     <option value="15m">15 Minutes</option>
                                     <option value="1h" selected>1 Hour</option>
                                     <option value="6h">6 Hours</option>
                                     <option value="24h">24 Hours</option>
                                 </select>
-                                <select id="telemetry-metric" class="telemetry-select" onchange="renderTelemetryChart()">
+                                <select id="telemetry-metric" class="telemetry-select">
                                     <option value="bandwidth" selected>Bandwidth (Mbps)</option>
                                     <option value="packets">Packets / sec</option>
                                     <option value="latency">Latency (ms)</option>
                                 </select>
-                                <button class="btn btn-secondary" onclick="toggleTelemetryLive()" id="telemetry-toggle-btn">
+                                <button class="btn btn-secondary" id="telemetry-toggle-btn">
                                     <i class="fa-solid fa-pause"></i> Pause
                                 </button>
                             </div>
@@ -243,10 +243,10 @@
                                 </select>
                             </div>
                             <div style="display: flex; gap: 8px;">
-                                <button class="btn btn-danger" onclick="triggerAttackSimulation()">
+                                <button class="btn btn-danger" id="telemetry-attack-btn">
                                     <i class="fa-solid fa-play"></i> Start Attack
                                 </button>
-                                <button class="btn btn-secondary" onclick="resetAttackSimulation()">
+                                <button class="btn btn-secondary" id="telemetry-reset-btn">
                                     <i class="fa-solid fa-rotate-right"></i> Reset Baseline
                                 </button>
                             </div>
@@ -284,12 +284,12 @@
                         </div>
                         <div class="flex items-center gap-3">
                             <div class="inline-flex rounded-lg p-1 bg-[#090e1c] border border-[#26354f]">
-                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all bg-[#1c2944] text-white border border-[#38bdf8]/40 shadow-sm" data-range="24H" onclick="setAnalyticsRange('24H')">24H</button>
-                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="7D" onclick="setAnalyticsRange('7D')">7D</button>
-                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="30D" onclick="setAnalyticsRange('30D')">30D</button>
-                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="90D" onclick="setAnalyticsRange('90D')">90D</button>
+                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all bg-[#1c2944] text-white border border-[#38bdf8]/40 shadow-sm" data-range="24H">24H</button>
+                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="7D">7D</button>
+                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="30D">30D</button>
+                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="90D">90D</button>
                             </div>
-                            <button type="button" onclick="exportAnalyticsReport()" class="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[#0f172a] hover:bg-[#1c2944] text-slate-200 border border-[#26354f] hover:border-[#3b5074] transition-all shadow-sm">
+                            <button type="button" id="export-analytics-btn" class="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[#0f172a] hover:bg-[#1c2944] text-slate-200 border border-[#26354f] hover:border-[#3b5074] transition-all shadow-sm">
                                 <i class="fa-solid fa-download text-emerald-400"></i>
                                 <span>Export Report</span>
                             </button>
@@ -422,7 +422,7 @@
                             <button type="submit" class="btn btn-primary" style="margin-top: 8px;">
                                 <i class="fa-solid fa-microchip"></i> Analyze Traffic Logs
                             </button>
-                            <button type="button" class="btn btn-secondary" id="load-sample-csv-btn" onclick="loadSampleCsv()" style="margin-top: 8px; margin-left: 8px;"><i class="fa-solid fa-file-arrow-down"></i> Load Demo CSV</button>
+                            <button type="button" class="btn btn-secondary" id="load-sample-csv-btn" style="margin-top: 8px; margin-left: 8px;"><i class="fa-solid fa-file-arrow-down"></i> Load Demo CSV</button>
                         </form>
                     </div>
 
@@ -453,7 +453,7 @@
                                 <h3 style="margin: 0; font-size: 1.1rem; color: #fff;"><i class="fa-solid fa-clock-rotate-left" style="color: var(--accent-sky); margin-right: 8px;"></i> Recent Analysis History</h3>
                                 <p style="margin: 4px 0 0; font-size: 0.82rem; color: var(--text-muted);">Audit log of analyzed network connection records.</p>
                             </div>
-                            <button class="btn btn-secondary" onclick="loadAnalysisHistory()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                            <button class="btn btn-secondary" id="refresh-history-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
                         </div>
                         <div class="table-container">
                             <table>
@@ -483,7 +483,7 @@
                         <h2>Live Network Monitoring</h2>
                         <p>Real-time packet metadata capture and flow aggregation from local Windows collector agent.</p>
                         <div class="header-actions">
-                            <button class="btn btn-secondary" onclick="loadLiveCollectorData()"><i class="fa-solid fa-arrows-rotate"></i> Refresh Status</button>
+                            <button class="btn btn-secondary" id="refresh-collector-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh Status</button>
                         </div>
                     </div>
 
@@ -560,8 +560,8 @@
                     <div class="section-header">
                         <h2>Device & Host Inventory</h2>
                         <p>Tracked devices and observed endpoints in the current environment.</p>
-                        <button class="btn btn-secondary" onclick="loadDevices()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
-                        <button class="btn btn-primary" onclick="openNewDeviceModal()"><i class="fa-solid fa-plus"></i> Add Device</button>
+                            <button class="btn btn-secondary" id="refresh-devices-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                            <button class="btn btn-primary" id="add-device-modal-btn"><i class="fa-solid fa-plus"></i> Add Device</button>
                     </div>
                     <div class="card">
                         <div class="table-container">
@@ -589,8 +589,8 @@
                         <h2>Digital Forensics Investigations</h2>
                         <p>Manage cases, associate evidence hashes, and track findings.</p>
                         <div class="header-actions">
-                            <button class="btn btn-secondary" onclick="loadInvestigations()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
-                            <button class="btn btn-primary" onclick="openNewInvestigationModal()"><i class="fa-solid fa-plus"></i> New Case</button>
+                            <button class="btn btn-secondary" id="refresh-investigations-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                            <button class="btn btn-primary" id="add-investigation-modal-btn"><i class="fa-solid fa-plus"></i> New Case</button>
                         </div>
                     </div>
 
@@ -737,10 +737,10 @@
                         <h3><i class="fa-solid fa-file-export" style="color: var(--accent-emerald);"></i> Consolidated Audit & Incident Package</h3>
                         <p style="color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 16px;">Export comprehensive security records, forensics telemetry, device inventories, and cryptographic hashes into a single consolidated audit report.</p>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <button class="btn btn-primary" onclick="generateReport()">
+                            <button class="btn btn-primary" id="export-report-btn">
                                 <i class="fa-solid fa-download"></i> Export JSON Package
                             </button>
-                            <button class="btn btn-secondary" onclick="toggleReportPreview()">
+                            <button class="btn btn-secondary" id="preview-report-btn">
                                 <i class="fa-solid fa-eye"></i> Preview Raw JSON
                             </button>
                         </div>
@@ -817,7 +817,7 @@
     <!-- New Investigation Modal -->
     <div id="investigation-modal" class="modal hidden">
         <div class="modal-content">
-            <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+            <button type="button" class="modal-close" id="close-investigation-modal-btn">&times;</button>
             <h3><i class="fa-solid fa-folder-plus" style="color: var(--accent-emerald); margin-right: 8px;"></i> Create Investigation Case</h3>
             <form id="new-investigation-form">
                 <div class="form-group">
@@ -833,7 +833,7 @@
                     <input type="text" id="inv-ref" placeholder="e.g. INC-2026-004" />
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-investigation-modal-btn">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create Case</button>
                 </div>
             </form>
@@ -843,9 +843,9 @@
     <!-- New Device Modal -->
     <div id="device-modal" class="modal hidden">
         <div class="modal-content">
-            <button type="button" class="modal-close" onclick="closeDeviceModal()">&times;</button>
+            <button type="button" class="modal-close" id="close-device-modal-btn">&times;</button>
             <h3><i class="fa-solid fa-network-wired" style="color: var(--accent-emerald); margin-right: 8px;"></i> Add Tracked Device</h3>
-            <form id="new-device-form" onsubmit="handleCreateDevice(event)">
+            <form id="new-device-form">
                 <div class="form-group">
                     <label>Hostname / Identifier *</label>
                     <input type="text" id="dev-hostname" placeholder="e.g. Workstation-Alpha, DMZ-Router" required />
@@ -871,7 +871,7 @@
                     <input type="text" id="dev-source" placeholder="e.g. DHCP Lease, ARP Cache" value="Manual Entry" />
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeDeviceModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-device-modal-btn">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Device</button>
                 </div>
             </form>
