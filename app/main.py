@@ -16,26 +16,36 @@ import uuid
 from datetime import datetime
 from typing import List, Literal, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from .services import analyze_logs, summarize
 from .database import get_db_connection, init_db
 from .stego_service import (
     calculate_sha256,
     embed_secret_in_image,
-    extract_secret_from_image,
-    analyze_image_forensics,
+    extract_secret_from_bytes,
+    analyze_image_forensics_from_bytes,
 )
 
 def _sanitize_filename(filename: Optional[str]) -> str:
     """Return a sanitized basename stripped of path traversal characters."""
     base = os.path.basename(filename or "file")
-    clean = base.lstrip("/\\.").strip()
+    # Remove any path traversal attempts
+    clean = base.lstrip("/\\.")
+    # Remove any remaining .. sequences
+    import re
+    clean = re.sub(r'\.\.+', '.', clean)
+    # Allow only alphanumeric, dot, dash, underscore
+    clean = re.sub(r'[^a-zA-Z0-9._-]', '_', clean)
+    clean = clean.strip(".")
     return clean or "uploaded_file"
 
 logging.basicConfig(
@@ -46,6 +56,16 @@ logger = logging.getLogger("net_sentinel")
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB
 _CHUNK = 64 * 1024  # 64 KB read chunks
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+limiter = Limiter(key_func=get_remote_address)
+app = FastAPI(title="Net Sentinel", version="1.0.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 async def _read_limited(file: UploadFile) -> bytes:
@@ -70,9 +90,6 @@ async def _read_limited(file: UploadFile) -> bytes:
 async def lifespan(app: FastAPI):
     init_db()
     yield
-
-
-app = FastAPI(title="Net Sentinel", version="1.0.0", lifespan=lifespan)
 
 cors_env = os.environ.get("CORS_ORIGINS", "").strip()
 cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()]
@@ -112,7 +129,7 @@ async def _log_requests(request: Request, call_next):
     if "Content-Security-Policy" not in response.headers:
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+            "script-src 'self' https://cdn.tailwindcss.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
             "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
             "img-src 'self' data: blob:; "
@@ -219,9 +236,10 @@ async def upload_log(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except ValueError as err:
-        raise HTTPException(status_code=400, detail=str(err))
+        raise HTTPException(status_code=400, detail="Invalid CSV format or data. Please check file contents.")
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error("Analysis error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error. Please try again later.")
 
 
 @app.post("/upload-dash", response_class=HTMLResponse)
@@ -262,7 +280,8 @@ async def upload_dash(request: Request, file: UploadFile = File(...)):
 
 
 @app.post("/api/network/analyze", response_model=dict)
-async def api_analyze_network_logs(file: UploadFile = File(...)):
+@limiter.limit("20/minute")
+async def api_analyze_network_logs(request: Request, file: UploadFile = File(...)):
     """Upload and analyze network connection logs CSV."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required. Please upload a CSV file.")
@@ -308,10 +327,11 @@ async def api_analyze_network_logs(file: UploadFile = File(...)):
         return {"events": events, "summary": summary}
     except HTTPException:
         raise
-    except ValueError as err:
-        raise HTTPException(status_code=400, detail=str(err))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.error("Analysis error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error. Please try again later.")
 
 
 @app.get("/api/network/history")
@@ -405,6 +425,7 @@ async def api_create_device(
     status: Optional[str] = Form("Active"),
     observation_source: Optional[str] = Form("Manual Entry"),
 ):
+    import re
     clean_hostname = (hostname or "").strip()
     clean_ip = (ip_address or "").strip()
     clean_mac = (mac_address or "").strip() if mac_address else None
@@ -415,6 +436,10 @@ async def api_create_device(
         raise HTTPException(status_code=400, detail="Hostname cannot be empty")
     if not clean_ip:
         raise HTTPException(status_code=400, detail="IP address cannot be empty")
+    # Validate IP address format
+    ip_pattern = r'^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+    if not re.match(ip_pattern, clean_ip):
+        raise HTTPException(status_code=400, detail="Invalid IP address format")
     if len(clean_hostname) > 255:
         raise HTTPException(status_code=400, detail="Hostname too long (max 255 characters)")
     if len(clean_ip) > 100:
@@ -546,10 +571,17 @@ async def api_search(q: str = Query("", alias="q")):
 
 # --- Steganography Lab API ---
 @app.post("/api/stego/embed")
+@limiter.limit("10/minute")
 async def api_embed_secret(
+    request: Request,
     file: UploadFile = File(...),
     secret: str = Form(...),
 ):
+    # Validate secret length to prevent DoS
+    if not secret:
+        raise HTTPException(status_code=400, detail="Secret cannot be empty")
+    if len(secret.encode('utf-8')) > 5000:
+        raise HTTPException(status_code=400, detail="Secret too large. Maximum 5000 bytes.")
     safe_name = _sanitize_filename(file.filename)
     file_bytes = await _read_limited(file)
     file_path = (UPLOAD_DIR / safe_name).resolve()
@@ -600,26 +632,19 @@ async def api_download_stego(filename: str):
 
 
 @app.post("/api/stego/extract")
-async def api_extract_secret(file: UploadFile = File(...)):
+@limiter.limit("30/minute")
+async def api_extract_secret(request: Request, file: UploadFile = File(...)):
     safe_name = _sanitize_filename(file.filename)
     file_bytes = await _read_limited(file)
-    file_path = (UPLOAD_DIR / safe_name).resolve()
-    if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
-        raise HTTPException(status_code=400, detail="Invalid filename")
-
-    with open(file_path, "wb") as f:
-        f.write(file_bytes)
-
     try:
-        success, result = await asyncio.to_thread(extract_secret_from_image, str(file_path))
+        success, result = await asyncio.to_thread(extract_secret_from_bytes, file_bytes)
         if not success:
             raise HTTPException(status_code=400, detail=result)
         return {"success": True, "secret": result}
-    finally:
-        try:
-            file_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # --- Image Forensics API ---
@@ -627,23 +652,15 @@ async def api_extract_secret(file: UploadFile = File(...)):
 async def api_forensics_analyze(file: UploadFile = File(...)):
     safe_name = _sanitize_filename(file.filename)
     file_bytes = await _read_limited(file)
-    file_path = (UPLOAD_DIR / safe_name).resolve()
-    if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
-        raise HTTPException(status_code=400, detail="Invalid filename")
-
-    with open(file_path, "wb") as f:
-        f.write(file_bytes)
-
     try:
-        analysis = await asyncio.to_thread(analyze_image_forensics, str(file_path), file_bytes)
+        analysis = await asyncio.to_thread(analyze_image_forensics_from_bytes, file_bytes, safe_name)
         if "error" in analysis:
             raise HTTPException(status_code=400, detail=analysis["error"])
         return analysis
-    finally:
-        try:
-            file_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # --- Integrity Verification API ---

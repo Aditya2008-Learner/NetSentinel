@@ -164,9 +164,13 @@ def _parse_port(value: str) -> Optional[int]:
 
 
 def _parse_bytes(value: str) -> int:
+    import math
     try:
-        return max(0, int(float(value)))
-    except (TypeError, ValueError):
+        val = float(value)
+        if math.isfinite(val) and val >= 0:
+            return int(min(val, 10**15))
+        return 0
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
@@ -195,7 +199,10 @@ def analyze_logs(csv_text: str) -> List[Dict[str, object]]:
         delimiter = "\t"
 
     import io
-    reader = csv.DictReader(io.StringIO(raw_text), delimiter=delimiter)
+    try:
+        reader = csv.DictReader(io.StringIO(raw_text), delimiter=delimiter)
+    except csv.Error as err:
+        raise ValueError(f"Malformed CSV data: {err}") from err
     if not reader.fieldnames:
         raise ValueError("CSV file contains no valid header row.")
 

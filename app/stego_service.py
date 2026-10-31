@@ -1,11 +1,12 @@
 """Steganography and Image Forensics service using Pillow."""
 
 import hashlib
+import io
 import os
 from PIL import Image
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, Any
 
-Image.MAX_IMAGE_PIXELS = 25_000_000
+Image.MAX_IMAGE_PIXELS = 4_000_000
 
 
 def _get_pixel_tuples(img: Image.Image):
@@ -70,37 +71,10 @@ def embed_secret_in_image(image_path: str, secret_text: str, output_path: str) -
 
 
 def extract_secret_from_image(image_path: str) -> Tuple[bool, str]:
-    """Extract hidden LSB secret text from an image."""
+    """Extract hidden LSB secret text from an image file path."""
     try:
-        with Image.open(image_path) as img:
-            rgb_img = img.convert("RGB")
-            pixels = _get_pixel_tuples(rgb_img)
-
-            binary_data = []
-            for pixel in pixels:
-                r, g, b = pixel
-                binary_data.append(str(r & 1))
-                binary_data.append(str(g & 1))
-                binary_data.append(str(b & 1))
-
-            binary_string = "".join(binary_data)
-            
-            # Read first 32 bits (4 bytes) for length
-            length_bits = binary_string[:32]
-            message_length = int(length_bits, 2)
-
-            total_bits_needed = 32 + (message_length * 8)
-            if total_bits_needed > len(binary_string):
-                return False, "Invalid steganographic payload or no secret found."
-
-            message_bits = binary_string[32:total_bits_needed]
-            message_bytes = bytearray()
-            for i in range(0, len(message_bits), 8):
-                byte = message_bits[i:i+8]
-                message_bytes.append(int(byte, 2))
-
-            secret_text = message_bytes.decode("utf-8", errors="ignore")
-        return True, secret_text
+        with open(image_path, "rb") as f:
+            return extract_secret_from_bytes(f.read())
     except Exception as exc:
         return False, f"Extraction failed: {str(exc)}"
 
@@ -109,46 +83,115 @@ def analyze_image_forensics(image_path: str, file_bytes: bytes) -> Dict[str, obj
     """Perform metadata and heuristic forensics analysis on an image."""
     try:
         with Image.open(image_path) as img:
-            width, height = img.size
-            format_name = img.format or "UNKNOWN"
-            mode = img.mode
-            sha256_hash = calculate_sha256(file_bytes)
-            file_size = len(file_bytes)
+            return _analyze_image_forensics_pil(img, file_bytes, os.path.basename(image_path))
+    except Exception as exc:
+        return {"error": str(exc)}
 
-            # Heuristic LSB entropy/noise check
-            # Sample first 10,000 pixels without materializing entire image into memory
+
+def _analyze_image_forensics_pil(img: Image.Image, file_bytes: bytes, filename: str) -> Dict[str, object]:
+    width, height = img.size
+    format_name = img.format or "UNKNOWN"
+    mode = img.mode
+    sha256_hash = calculate_sha256(file_bytes)
+    file_size = len(file_bytes)
+
+    rgb_img = img.convert("RGB")
+    lsb_count = 0
+    total_samples = 0
+    for pixel in _iter_pixel_tuples(rgb_img):
+        r, g, b = pixel
+        if (r & 1) ^ (g & 1) ^ (b & 1):
+            lsb_count += 1
+        total_samples += 1
+        if total_samples >= 10000:
+            break
+    
+    noise_ratio = lsb_count / total_samples if total_samples > 0 else 0
+    entropy_factor = max(0.0, 1.0 - 2.0 * abs(noise_ratio - 0.5))
+    susposity_score = round(min(100.0, max(5.0, (entropy_factor * 80.0) + (15.0 if format_name == 'PNG' else 5.0))), 1)
+
+    indicators = []
+    if noise_ratio >= 0.42 and noise_ratio <= 0.58:
+        indicators.append("High LSB bit-plane entropy approaching random distribution (characteristic of steganographic payload).")
+    else:
+        indicators.append("Natural LSB spatial correlation observed (typical for non-steganographic imagery).")
+
+    if format_name == "PNG":
+        indicators.append("Lossless format suitable for LSB data hiding.")
+    else:
+        indicators.append("Lossy format (JPEG); LSB modification may be degraded by compression.")
+
+    return {
+        "filename": filename,
+        "format": format_name,
+        "mode": mode,
+        "dimensions": f"{width} x {height}",
+        "file_size_bytes": file_size,
+        "sha256": sha256_hash,
+        "susposity_score": susposity_score,
+        "indicators": indicators,
+        "status": "Analyzed successfully"
+    }
+
+
+def extract_secret_from_bytes(file_bytes: bytes) -> Tuple[bool, str]:
+    """Extract hidden LSB secret text from image bytes directly."""
+    try:
+        with Image.open(io.BytesIO(file_bytes)) as img:
             rgb_img = img.convert("RGB")
-            lsb_count = 0
-            total_samples = 0
-            for pixel in _iter_pixel_tuples(rgb_img):
-                r, g, b = pixel
-                if (r & 1) ^ (g & 1) ^ (b & 1):
-                    lsb_count += 1
-                total_samples += 1
-                if total_samples >= 10000:
+            width, height = rgb_img.size
+            total_pixels = width * height
+            total_bits = total_pixels * 3
+
+            if total_bits < 32:
+                return False, "No hidden message found or invalid payload length"
+
+            pixels = _get_pixel_tuples(rgb_img)
+
+            # Flatten all channel bits into a generator or list
+            all_bits = []
+            for r, g, b in pixels:
+                all_bits.append(r & 1)
+                all_bits.append(g & 1)
+                all_bits.append(b & 1)
+
+            if len(all_bits) < 32:
+                return False, "No hidden message found or invalid payload length"
+
+            length_bits = all_bits[:32]
+            try:
+                length = int("".join(str(b) for b in length_bits), 2)
+            except ValueError:
+                return False, "No hidden message found or invalid payload length"
+
+            if length <= 0 or length > 1_000_000 or (32 + length * 8) > len(all_bits):
+                return False, "No hidden message found or invalid payload length"
+
+            message_bits = all_bits[32 : 32 + length * 8]
+            message_bytes = bytearray()
+            for i in range(0, len(message_bits), 8):
+                byte_bits = message_bits[i : i + 8]
+                if len(byte_bits) < 8:
                     break
-            
-            noise_ratio = lsb_count / total_samples if total_samples > 0 else 0
-            susposity_score = round(min(100, max(5, abs(noise_ratio - 0.5) * 100 + (15 if format_name == 'PNG' else 5))), 1)
+                current_byte = 0
+                for b in byte_bits:
+                    current_byte = (current_byte << 1) | b
+                message_bytes.append(current_byte)
 
-            indicators = []
-            if susposity_score > 60:
-                indicators.append("Elevated LSB entropy variance detected.")
-            if format_name == "PNG":
-                indicators.append("Lossless format suitable for LSB data hiding.")
-            else:
-                indicators.append("Lossy format (JPEG); LSB modification may be degraded by compression.")
+            if len(message_bytes) != length:
+                return False, "No hidden message found or invalid payload length"
 
-            return {
-                "filename": os.path.basename(image_path),
-                "format": format_name,
-                "mode": mode,
-                "dimensions": f"{width} x {height}",
-                "file_size_bytes": file_size,
-                "sha256": sha256_hash,
-                "susposity_score": susposity_score,
-                "indicators": indicators,
-                "status": "Analyzed successfully"
-            }
+            decoded_text = message_bytes.decode("utf-8", errors="replace")
+            return True, decoded_text
+    except Exception as exc:
+        return False, f"Extraction failed: {str(exc)}"
+
+
+
+def analyze_image_forensics_from_bytes(file_bytes: bytes, filename: str = "image.png") -> Dict[str, Any]:
+    """Perform forensics analysis directly from image bytes."""
+    try:
+        with Image.open(io.BytesIO(file_bytes)) as img:
+            return _analyze_image_forensics_pil(img, file_bytes, filename)
     except Exception as exc:
         return {"error": str(exc)}
