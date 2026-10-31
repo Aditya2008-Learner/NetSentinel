@@ -26,7 +26,34 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
-    // Wire event listeners replacing inline HTML event attributes
+    // Mobile navigation drawer toggle wiring
+    const hamburgerBtn = document.getElementById("hamburger-btn");
+    const sidebar = document.getElementById("sidebar");
+    const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+
+    function toggleMobileMenu() {
+        if (sidebar && sidebarBackdrop) {
+            sidebar.classList.toggle("mobile-open");
+            sidebarBackdrop.classList.toggle("active");
+        }
+    }
+
+    function closeMobileMenu() {
+        if (sidebar && sidebarBackdrop) {
+            sidebar.classList.remove("mobile-open");
+            sidebarBackdrop.classList.remove("active");
+        }
+    }
+
+    if (hamburgerBtn) hamburgerBtn.addEventListener("click", toggleMobileMenu);
+    if (sidebarBackdrop) sidebarBackdrop.addEventListener("click", closeMobileMenu);
+
+    const navItems = document.querySelectorAll(".nav-item");
+    navItems.forEach(item => {
+        item.addEventListener("click", () => {
+            closeMobileMenu();
+        });
+    });
     const telemetryRangeEl = document.getElementById("telemetry-range");
     if (telemetryRangeEl) telemetryRangeEl.addEventListener("change", loadTelemetryGraph);
 

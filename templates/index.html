@@ -45,9 +45,19 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+    <div class="mobile-header">
+        <a href="/" class="mobile-brand">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Net Sentinel</span>
+        </a>
+        <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Toggle Navigation Menu">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+    </div>
     <div class="app-container">
         <!-- Sidebar Navigation -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <a href="/" class="brand-area" style="text-decoration: none; display: flex; align-items: center; gap: 12px; color: inherit;" title="Return to Net Sentinel Landing Page">
                 <i class="fa-solid fa-shield-halved brand-icon"></i>
                 <div class="brand-text">
