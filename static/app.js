@@ -371,6 +371,7 @@ let _phase = 0;
 let _latestTelemetryPoint = null;
 let _telemetryMetricDirty = false;
 let _activeTelemetryMetric = "bandwidth";
+let _telemetryLastUpdated = "";
 
 function _metricPair(point, metric) {
     if (!point) return [0, 0];
@@ -421,9 +422,12 @@ function _updateTelemetryHeader(metric) {
     } else {
         pEl.textContent = `Live Inbound: ${Number(point.inbound_mbps || 0).toFixed(1)} Mbps`;
     }
-    if (sEl && !sEl.textContent.startsWith("Updated")) {
-        const out = metric === "bandwidth" ? `${Number(point.outbound_mbps || 0).toFixed(1)} Mbps out` : "Live agent";
-        sEl.textContent = out;
+    if (sEl) {
+        const out = metric === "bandwidth"
+            ? `Outbound: ${Number(point.outbound_mbps || 0).toFixed(1)} Mbps`
+            : (metric === "latency" ? "Status: Stable" : "Source: Live Agent");
+        const suffix = _telemetryLastUpdated ? ` (${_telemetryLastUpdated} UTC)` : "";
+        sEl.textContent = `${out}${suffix}`;
     }
 }
 
@@ -699,11 +703,9 @@ function _updateBanner(data) {
 }
 
 function _updateLastUpdated(ok) {
-    const el = document.getElementById("telemetry-stat-secondary");
-    if (!el) return;
     if (ok) {
         const now = new Date();
-        el.textContent = `Updated ${now.toTimeString().slice(0, 8)} UTC`;
+        _telemetryLastUpdated = now.toTimeString().slice(0, 8);
     }
 }
 

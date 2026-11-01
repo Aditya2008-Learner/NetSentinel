@@ -64,7 +64,6 @@
     /* Motion Spring Easing Tokens (Physical Harmonic Oscillator Approximation) */
     --ease-spring-bouncy: linear(0, 0.2044, 0.5399, 0.8012, 0.9501, 1.0133, 1.0283, 1.0233, 1.0138, 1.0061, 1.0016, 0.9997, 1);
     --ease-spring-snappy: linear(0, 0.382, 0.7797, 0.9531, 1.0008, 1.0061, 1.0033, 1);
-    --ease-spring-gentle: linear(0, 0.15, 0.45, 0.75, 0.93, 1.01, 1.02, 1.01, 1.003, 1);
 
     /* Semantic Aliases */
     --border-color: var(--border-default);
