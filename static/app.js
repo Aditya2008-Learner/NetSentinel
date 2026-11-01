@@ -490,26 +490,31 @@ function renderTelemetryChart() {
         ctx.fill();
     }
 
-    // Schedule next continuous animation frame when active
-    if (!telemetryPaused && !document.hidden) {
-        _telemetryAnimFrame = requestAnimationFrame(renderTelemetryChart);
-    }
-}
-
     // Update Header Stats
     if (metric === "bandwidth") {
         const peak = Math.max(...series.map(s => s.inbound_mbps));
-        document.getElementById("telemetry-stat-primary").textContent = `Peak Inbound: ${peak} Mbps`;
+        const pEl = document.getElementById("telemetry-stat-primary");
+        if (pEl) pEl.textContent = `Peak Inbound: ${peak} Mbps`;
         const avgLat = (series.reduce((acc, s) => acc + s.latency_ms, 0) / series.length).toFixed(1);
-        document.getElementById("telemetry-stat-secondary").textContent = `Avg Latency: ${avgLat} ms`;
+        const sEl = document.getElementById("telemetry-stat-secondary");
+        if (sEl) sEl.textContent = `Avg Latency: ${avgLat} ms`;
     } else if (metric === "packets") {
         const peakPps = Math.max(...series.map(s => s.packets_per_sec));
-        document.getElementById("telemetry-stat-primary").textContent = `Peak Rate: ${peakPps} pps`;
-        document.getElementById("telemetry-stat-secondary").textContent = `Source: Standalone Agent`;
+        const pEl = document.getElementById("telemetry-stat-primary");
+        if (pEl) pEl.textContent = `Peak Rate: ${peakPps} pps`;
+        const sEl = document.getElementById("telemetry-stat-secondary");
+        if (sEl) sEl.textContent = `Source: Standalone Agent`;
     } else {
         const peakLat = Math.max(...series.map(s => s.latency_ms));
-        document.getElementById("telemetry-stat-primary").textContent = `Peak Latency: ${peakLat} ms`;
-        document.getElementById("telemetry-stat-secondary").textContent = `Status: Stable`;
+        const pEl = document.getElementById("telemetry-stat-primary");
+        if (pEl) pEl.textContent = `Peak Latency: ${peakLat} ms`;
+        const sEl = document.getElementById("telemetry-stat-secondary");
+        if (sEl) sEl.textContent = `Status: Stable`;
+    }
+
+    // Schedule next continuous animation frame when active
+    if (!telemetryPaused && !document.hidden) {
+        _telemetryAnimFrame = requestAnimationFrame(renderTelemetryChart);
     }
 }
 
