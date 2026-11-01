@@ -255,9 +255,68 @@ async function loadLiveCollectorData() {
                 `).join("");
             }
         }
+
+        // Render Live Protocol Donut Visualization
+        renderLiveProtocolDonut(data.protocols || []);
     } catch (err) {
         console.error("Failed to load live collector data", err);
     }
+}
+
+function renderLiveProtocolDonut(protocols) {
+    const donutSvg = document.getElementById("protocol-donut-chart");
+    const legendList = document.getElementById("protocol-legend-list");
+    const totalEl = document.getElementById("donut-total-flows");
+    if (!donutSvg || !legendList) return;
+
+    if (!protocols || protocols.length === 0) {
+        if (totalEl) totalEl.textContent = "0";
+        donutSvg.innerHTML = '<circle cx="50" cy="50" r="38" fill="transparent" stroke="#1e293b" stroke-width="12"></circle>';
+        legendList.innerHTML = '<span style="color: var(--text-muted); font-size: 0.82rem; font-style: italic;">No live flows captured yet.</span>';
+        return;
+    }
+
+    const totalFlows = protocols.reduce((acc, p) => acc + (p.count || 0), 0);
+    if (totalEl) totalEl.textContent = totalFlows.toLocaleString();
+
+    const colors = ["#10b981", "#38bdf8", "#f59e0b", "#f43f5e", "#8b5cf6"];
+    const radius = 38;
+    const circumference = 2 * Math.PI * radius; // ~238.76
+
+    let accumulatedOffset = 0;
+    let circlesHtml = '<circle cx="50" cy="50" r="38" fill="transparent" stroke="#1e293b" stroke-width="12"></circle>';
+    let legendHtml = '';
+
+    protocols.forEach((p, idx) => {
+        const count = p.count || 0;
+        const pct = totalFlows > 0 ? (count / totalFlows) : 0;
+        const dashLen = pct * circumference;
+        const color = colors[idx % colors.length];
+
+        circlesHtml += `
+            <circle cx="50" cy="50" r="38" fill="transparent"
+                stroke="${color}" stroke-width="12"
+                stroke-dasharray="${dashLen} ${circumference}"
+                stroke-dashoffset="${-accumulatedOffset}"
+                style="transition: stroke-dasharray 0.6s ease-out, stroke-dashoffset 0.6s ease-out;">
+                <title>${p.protocol}: ${count} flows (${(pct * 100).toFixed(1)}%)</title>
+            </circle>
+        `;
+        accumulatedOffset += dashLen;
+
+        legendHtml += `
+            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+                <span style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${color}; display: inline-block;"></span>
+                    <strong style="color: #fff;">${escapeHtml(p.protocol)}</strong>
+                </span>
+                <span style="color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${count} (${(pct * 100).toFixed(0)}%)</span>
+            </div>
+        `;
+    });
+
+    donutSvg.innerHTML = circlesHtml;
+    legendList.innerHTML = legendHtml;
 }
 async function loadOverviewData() {
     try {
@@ -287,6 +346,9 @@ async function loadOverviewData() {
 }
 
 // --- Telemetry Chart & Live Feed ---
+let _telemetryAnimFrame = null;
+let _telemetryAnimProgress = 1.0;
+
 function renderTelemetryChart() {
     if (!latestTelemetryData || !latestTelemetryData.series) return;
     const canvas = document.getElementById("telemetry-canvas");
@@ -310,6 +372,9 @@ function renderTelemetryChart() {
     const width = canvas.width;
     const height = canvas.height;
 
+    // Respect user prefers-reduced-motion
+    const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     ctx.clearRect(0, 0, width, height);
 
     // Draw subtle grid lines
@@ -323,19 +388,61 @@ function renderTelemetryChart() {
         ctx.stroke();
     }
 
-    // Draw time-series line with refined SOC accents
+    const stepX = width / (values.length - 1 || 1);
+
+    // Create subtle gradient area under curve
+    const areaGrad = ctx.createLinearGradient(0, 0, 0, height);
+    if (metric === "latency") {
+        areaGrad.addColorStop(0, "rgba(245, 158, 11, 0.22)");
+        areaGrad.addColorStop(1, "rgba(245, 158, 11, 0.0)");
+    } else {
+        areaGrad.addColorStop(0, "rgba(16, 185, 129, 0.25)");
+        areaGrad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
+    }
+
+    ctx.fillStyle = areaGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    values.forEach((val, idx) => {
+        const x = idx * stepX;
+        const targetY = height - ((val - minVal) / (maxVal - minVal || 1)) * (height - 30) - 15;
+        ctx.lineTo(x, targetY);
+    });
+    ctx.lineTo(width, height);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw smooth curved time-series line with refined SOC accents
     ctx.strokeStyle = metric === "latency" ? "#f59e0b" : "#10b981";
     ctx.lineWidth = 2.5;
     ctx.beginPath();
 
-    const stepX = width / (values.length - 1 || 1);
     values.forEach((val, idx) => {
         const x = idx * stepX;
-        const y = height - ((val - minVal) / (maxVal - minVal || 1)) * (height - 24) - 12;
+        const y = height - ((val - minVal) / (maxVal - minVal || 1)) * (height - 30) - 15;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
+
+    // Draw animated pulse highlight dot on the newest live data point
+    if (values.length > 0) {
+        const lastIdx = values.length - 1;
+        const lastX = lastIdx * stepX;
+        const lastY = height - ((values[lastIdx] - minVal) / (maxVal - minVal || 1)) * (height - 30) - 15;
+
+        // Outer pulse circle
+        ctx.fillStyle = metric === "latency" ? "rgba(245, 158, 11, 0.28)" : "rgba(16, 185, 129, 0.3)";
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner solid dot
+        ctx.fillStyle = metric === "latency" ? "#f59e0b" : "#10b981";
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
 
     // Update Header Stats
     if (metric === "bandwidth") {
@@ -682,6 +789,35 @@ async function loadNetworkResults(data) {
             <span class="badge badge-danger">High Severity: ${highSev}</span>
             <span class="badge badge-warning">Medium Severity: ${mediumSev}</span>
             <span class="badge badge-success">Low Severity: ${lowSev}</span>
+        `;
+    }
+
+    // Render animated CSV threat distribution bars
+    const threatChartWrap = document.getElementById("csv-threat-chart-wrap");
+    const threatBarsContainer = document.getElementById("csv-threat-bars");
+    if (threatChartWrap && threatBarsContainer) {
+        threatChartWrap.style.display = "block";
+        const maxSev = Math.max(highSev, mediumSev, lowSev, 1);
+        const highH = Math.max(10, Math.round((highSev / maxSev) * 100));
+        const medH = Math.max(10, Math.round((mediumSev / maxSev) * 100));
+        const lowH = Math.max(10, Math.round((lowSev / maxSev) * 100));
+
+        threatBarsContainer.innerHTML = `
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #f43f5e; font-family: 'JetBrains Mono', monospace;">${highSev}</span>
+                <div style="width: 100%; height: ${highH}%; background: linear-gradient(180deg, #f43f5e 0%, rgba(244, 63, 94, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s ease-out both;"></div>
+                <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">High</span>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #f59e0b; font-family: 'JetBrains Mono', monospace;">${mediumSev}</span>
+                <div style="width: 100%; height: ${medH}%; background: linear-gradient(180deg, #f59e0b 0%, rgba(245, 158, 11, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s ease-out 100ms both;"></div>
+                <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Medium</span>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
+                <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; font-family: 'JetBrains Mono', monospace;">${lowSev}</span>
+                <div style="width: 100%; height: ${lowH}%; background: linear-gradient(180deg, #10b981 0%, rgba(16, 185, 129, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s ease-out 200ms both;"></div>
+                <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Low</span>
+            </div>
         `;
     }
 
@@ -1969,9 +2105,11 @@ function renderMiniBars(containerId, values, barColor) {
     const el = document.getElementById(containerId);
     if (!el || !values || !values.length) return;
     const max = Math.max(...values, 1);
-    el.innerHTML = values.map(v => {
+    el.innerHTML = values.map((v, idx) => {
         const hPct = Math.max(12, Math.round((v / max) * 100));
-        return `<span class="flex-1 rounded-sm opacity-80 hover:opacity-100 transition-all cursor-pointer" style="height: ${hPct}%; background-color: ${barColor};" title="${v}"></span>`;
+        // Add subtle staggered animation delay for graceful rising entry
+        const delayMs = idx * 35;
+        return `<span class="flex-1 rounded-sm opacity-85 hover:opacity-100 transition-all cursor-pointer mini-bar-anim" style="height: ${hPct}%; background-color: ${barColor}; animation: barRise 0.4s ease-out ${delayMs}ms both;" title="${v}"></span>`;
     }).join("");
 }
 

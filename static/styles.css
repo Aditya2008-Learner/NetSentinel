@@ -1763,3 +1763,42 @@ input[type="file"]::-webkit-file-upload-button:hover {
         justify-content: center;
     }
 }
+
+/* ==========================================================================
+   Motion Graphic Keyframes & Reduced-Motion Support
+   ========================================================================== */
+
+@keyframes barRise {
+    0% {
+        transform: scaleY(0);
+        transform-origin: bottom;
+        opacity: 0.2;
+    }
+    100% {
+        transform: scaleY(1);
+        transform-origin: bottom;
+        opacity: 1;
+    }
+}
+
+@keyframes pulseGlow {
+    0%, 100% {
+        filter: drop-shadow(0 0 2px rgba(16, 185, 129, 0.4));
+    }
+    50% {
+        filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.8));
+    }
+}
+
+#telemetry-canvas, #analytics-svg-chart {
+    transition: opacity 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

@@ -439,6 +439,15 @@
                     <div id="network-results-container" class="card hidden">
                         <h3>Analysis Results & Explainable Alerts</h3>
                         <div id="network-summary-stats" class="summary-pills"></div>
+                        <div id="csv-threat-chart-wrap" style="margin: 16px 0; display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-size: 0.85rem; font-weight: 600; color: #fff;"><i class="fa-solid fa-chart-simple" style="color: var(--accent-rose); margin-right: 6px;"></i> Threat Severity Distribution</span>
+                                <span id="csv-chart-badge" class="badge badge-info">Ingested Logs</span>
+                            </div>
+                            <div style="background: var(--bg-surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px; height: 110px; display: flex; align-items: flex-end; gap: 12px;" id="csv-threat-bars">
+                                <!-- Dynamic animated threat bars -->
+                            </div>
+                        </div>
                         <div class="table-container">
                             <table id="network-events-table">
                                <thead>
@@ -524,6 +533,27 @@
                             <div class="metric-info">
                                 <span class="metric-label">Bytes Observed</span>
                                 <h3 id="live-bytes-count">0 KB</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3 style="margin: 0;"><i class="fa-solid fa-chart-pie" style="color: var(--accent-emerald); margin-right: 8px;"></i> Live Protocol Breakdown</h3>
+                            <span class="badge badge-success"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 4px;"></i> Live Flows</span>
+                        </div>
+                        <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;" id="live-protocol-container">
+                            <div style="position: relative; width: 140px; height: 140px;">
+                                <svg id="protocol-donut-chart" viewBox="0 0 100 100" style="width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible;">
+                                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#1e293b" stroke-width="12"></circle>
+                                </svg>
+                                <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;">
+                                    <span id="donut-total-flows" style="font-size: 1.1rem; font-weight: 700; color: #fff;">0</span>
+                                    <span style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase;">Flows</span>
+                                </div>
+                            </div>
+                            <div id="protocol-legend-list" style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 180px;">
+                                <span style="color: var(--text-muted); font-size: 0.82rem; font-style: italic;">No live flows captured yet.</span>
                             </div>
                         </div>
                     </div>
