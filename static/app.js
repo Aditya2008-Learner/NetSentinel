@@ -12,7 +12,7 @@ let _telemetrySeq = 0;
 let _telemetryInFlight = false;
 // Consecutive failure count for bounded backoff.
 let _telemetryFailCount = 0;
-const _TELEMETRY_BASE_MS = 5000;
+const _TELEMETRY_BASE_MS = 2000;
 const _TELEMETRY_MAX_BACKOFF_MS = 30000;
 
 // Sanitize dynamic strings to prevent XSS injection
@@ -355,41 +355,74 @@ async function loadOverviewData() {
     }
 }
 
-// --- Telemetry Chart & Live Feed ---
+// --- Telemetry Chart & Continuous Live Motion Loop ---
 let _telemetryAnimFrame = null;
-let _telemetryAnimProgress = 1.0;
+let _telemetryScrollOffset = 0;
+let _lastRenderTime = performance.now();
+let _telemetryDisplayPoints = [];
 
 function renderTelemetryChart() {
-    if (!latestTelemetryData || !latestTelemetryData.series) return;
+    if (!latestTelemetryData || !latestTelemetryData.series || latestTelemetryData.series.length === 0) return;
     const canvas = document.getElementById("telemetry-canvas");
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const metric = document.getElementById("telemetry-metric").value;
+    const metricElem = document.getElementById("telemetry-metric");
+    const metric = metricElem ? metricElem.value : "bandwidth";
 
     const containerWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 600;
-    canvas.width = Math.max(containerWidth - 24, 300);
-    canvas.height = 180;
+    const targetWidth = Math.max(containerWidth - 24, 300);
+    const targetHeight = 180;
+
+    if (canvas.width !== targetWidth) canvas.width = targetWidth;
+    if (canvas.height !== targetHeight) canvas.height = targetHeight;
 
     const series = latestTelemetryData.series;
-    const values = series.map(s => {
+    const targetValues = series.map(s => {
         if (metric === "bandwidth") return s.inbound_mbps;
         if (metric === "packets") return s.packets_per_sec;
         return s.latency_ms;
     });
 
+    // Initialize or smoothly interpolate rolling display points
+    if (_telemetryDisplayPoints.length !== targetValues.length) {
+        _telemetryDisplayPoints = [...targetValues];
+    } else {
+        // Continuous smooth ease-toward-target for organic fluidity
+        for (let i = 0; i < targetValues.length; i++) {
+            _telemetryDisplayPoints[i] += (targetValues[i] - _telemetryDisplayPoints[i]) * 0.18;
+        }
+    }
+
+    const values = _telemetryDisplayPoints;
     const maxVal = Math.max(...values, 10);
     const minVal = 0;
     const width = canvas.width;
     const height = canvas.height;
 
-    // Respect user prefers-reduced-motion
-    const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Continuous micro-timeline flow offset (moving right-to-left)
+    const now = performance.now();
+    const dt = Math.min((now - _lastRenderTime) / 1000, 0.1);
+    _lastRenderTime = now;
+
+    if (!telemetryPaused) {
+        _telemetryScrollOffset += dt * 14; // Smooth continuous pixels per second
+    }
 
     ctx.clearRect(0, 0, width, height);
 
-    // Draw subtle grid lines
-    ctx.strokeStyle = "rgba(38, 53, 79, 0.6)";
+    // Subtle moving vertical grid lines indicating continuous temporal progression
+    ctx.strokeStyle = "rgba(38, 53, 79, 0.4)";
     ctx.lineWidth = 1;
+    const gridSpacing = 60;
+    const gridShift = _telemetryScrollOffset % gridSpacing;
+    for (let gx = width - gridShift; gx > 0; gx -= gridSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(gx, 0);
+        ctx.lineTo(gx, height);
+        ctx.stroke();
+    }
+
+    // Horizontal grid levels
     for (let i = 1; i < 4; i++) {
         let y = (height / 4) * i;
         ctx.beginPath();
@@ -400,7 +433,7 @@ function renderTelemetryChart() {
 
     const stepX = width / (values.length - 1 || 1);
 
-    // Create subtle gradient area under curve
+    // Gradient fill under the flowing curve
     const areaGrad = ctx.createLinearGradient(0, 0, 0, height);
     if (metric === "latency") {
         areaGrad.addColorStop(0, "rgba(245, 158, 11, 0.22)");
@@ -422,9 +455,11 @@ function renderTelemetryChart() {
     ctx.closePath();
     ctx.fill();
 
-    // Draw smooth curved time-series line with refined SOC accents
+    // Primary flowing telemetry line
     ctx.strokeStyle = metric === "latency" ? "#f59e0b" : "#10b981";
     ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
     ctx.beginPath();
 
     values.forEach((val, idx) => {
@@ -435,24 +470,31 @@ function renderTelemetryChart() {
     });
     ctx.stroke();
 
-    // Draw animated pulse highlight dot on the newest live data point
+    // Glowing real-time pulse dot on the newest arriving edge point
     if (values.length > 0) {
         const lastIdx = values.length - 1;
         const lastX = lastIdx * stepX;
         const lastY = height - ((values[lastIdx] - minVal) / (maxVal - minVal || 1)) * (height - 30) - 15;
 
-        // Outer pulse circle
-        ctx.fillStyle = metric === "latency" ? "rgba(245, 158, 11, 0.28)" : "rgba(16, 185, 129, 0.3)";
+        const pulseScale = 1 + Math.sin(now * 0.006) * 0.35;
+        // Outer glowing pulse halo
+        ctx.fillStyle = metric === "latency" ? "rgba(245, 158, 11, 0.25)" : "rgba(16, 185, 129, 0.28)";
         ctx.beginPath();
-        ctx.arc(lastX, lastY, 7, 0, Math.PI * 2);
+        ctx.arc(lastX, lastY, 7 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
 
-        // Inner solid dot
+        // Inner solid beacon
         ctx.fillStyle = metric === "latency" ? "#f59e0b" : "#10b981";
         ctx.beginPath();
-        ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+        ctx.arc(lastX, lastY, 3.8, 0, Math.PI * 2);
         ctx.fill();
     }
+
+    // Schedule next continuous animation frame when active
+    if (!telemetryPaused && !document.hidden) {
+        _telemetryAnimFrame = requestAnimationFrame(renderTelemetryChart);
+    }
+}
 
     // Update Header Stats
     if (metric === "bandwidth") {
