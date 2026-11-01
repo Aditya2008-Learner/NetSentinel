@@ -61,6 +61,11 @@
     --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     --transition-smooth: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 
+    /* Motion Spring Easing Tokens (Physical Harmonic Oscillator Approximation) */
+    --ease-spring-bouncy: linear(0, 0.2044, 0.5399, 0.8012, 0.9501, 1.0133, 1.0283, 1.0233, 1.0138, 1.0061, 1.0016, 0.9997, 1);
+    --ease-spring-snappy: linear(0, 0.382, 0.7797, 0.9531, 1.0008, 1.0061, 1.0033, 1);
+    --ease-spring-gentle: linear(0, 0.15, 0.45, 0.75, 0.93, 1.01, 1.02, 1.01, 1.003, 1);
+
     /* Semantic Aliases */
     --border-color: var(--border-default);
     --success: var(--accent-emerald);
@@ -1772,12 +1777,82 @@ input[type="file"]::-webkit-file-upload-button:hover {
     0% {
         transform: scaleY(0);
         transform-origin: bottom;
-        opacity: 0.2;
+        opacity: 0.1;
+    }
+    68% {
+        transform: scaleY(1.06);
+        transform-origin: bottom;
+        opacity: 0.95;
     }
     100% {
         transform: scaleY(1);
         transform-origin: bottom;
         opacity: 1;
+    }
+}
+
+@keyframes chartLineDraw {
+    0% {
+        stroke-dashoffset: 1500;
+        opacity: 0.3;
+    }
+    100% {
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+}
+
+@keyframes chartAreaFade {
+    0% {
+        opacity: 0;
+        transform: scaleY(0.2);
+        transform-origin: bottom;
+    }
+    100% {
+        opacity: 1;
+        transform: scaleY(1);
+        transform-origin: bottom;
+    }
+}
+
+@keyframes dotPop {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    60% {
+        transform: scale(1.4);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes badgePop {
+    0% {
+        transform: scale(0.6) translateY(5px);
+        opacity: 0;
+    }
+    70% {
+        transform: scale(1.12) translateY(-2px);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes graphReveal {
+    0% {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
@@ -1790,8 +1865,48 @@ input[type="file"]::-webkit-file-upload-button:hover {
     }
 }
 
+/* Micro-interactions for interactive graph elements */
+.mini-bar-anim {
+    transform-origin: bottom;
+    transition: transform 0.22s var(--ease-spring-snappy), filter 0.2s ease, opacity 0.2s ease;
+}
+
+.mini-bar-anim:hover {
+    transform: scaleY(1.12) scaleX(1.15);
+    filter: brightness(1.25) drop-shadow(0 0 4px currentColor);
+    opacity: 1 !important;
+    z-index: 2;
+}
+
+.chart-dot-interactive {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 0.2s var(--ease-spring-bouncy), filter 0.2s ease;
+    cursor: pointer;
+}
+
+.chart-dot-interactive:hover {
+    transform: scale(1.6);
+    filter: drop-shadow(0 0 6px currentColor);
+}
+
+.protocol-donut-slice {
+    transform-origin: center;
+    transition: stroke-dasharray 0.75s var(--ease-spring-bouncy),
+                stroke-dashoffset 0.75s var(--ease-spring-bouncy),
+                stroke-width 0.25s var(--ease-spring-snappy),
+                filter 0.25s ease;
+    cursor: pointer;
+}
+
+.protocol-donut-slice:hover {
+    stroke-width: 15px;
+    filter: drop-shadow(0 0 5px currentColor);
+}
+
 #telemetry-canvas, #analytics-svg-chart {
     transition: opacity 0.3s ease;
+    animation: graphReveal 0.4s var(--ease-spring-snappy);
 }
 
 @media (prefers-reduced-motion: reduce) {

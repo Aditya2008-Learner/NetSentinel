@@ -307,11 +307,10 @@ function renderLiveProtocolDonut(protocols) {
         const color = colors[idx % colors.length];
 
         circlesHtml += `
-            <circle cx="50" cy="50" r="38" fill="transparent"
+            <circle class="protocol-donut-slice" cx="50" cy="50" r="38" fill="transparent"
                 stroke="${color}" stroke-width="12"
                 stroke-dasharray="${dashLen} ${circumference}"
-                stroke-dashoffset="${-accumulatedOffset}"
-                style="transition: stroke-dasharray 0.6s ease-out, stroke-dashoffset 0.6s ease-out;">
+                stroke-dashoffset="${-accumulatedOffset}">
                 <title>${p.protocol}: ${count} flows (${(pct * 100).toFixed(1)}%)</title>
             </circle>
         `;
@@ -580,20 +579,34 @@ function renderTelemetryChart() {
         const lastInY = height - ((inValues[lastIdx] - minVal) / (maxVal - minVal)) * (height - 30) - 15;
         const lastOutY = height - ((outValues[lastIdx] - minVal) / (maxVal - minVal)) * (height - 30) - 15;
 
-        // Inbound point pulse
-        ctx.fillStyle = "rgba(16, 185, 129, 0.35)";
+        // Breathing spring wave parameters for arriving packet pulse
+        const pulseScale = telemetryPaused ? 1 : (1 + Math.sin(_phase * 4.5) * 0.32);
+        const pulseAlpha = telemetryPaused ? 0.35 : (0.35 + Math.sin(_phase * 4.5) * 0.16);
+
+        // Inbound point pulse (radar wave)
+        ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastInY, 6.5, 0, Math.PI * 2);
+        ctx.arc(lastX, lastInY, 11 * pulseScale, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha})`;
+        ctx.beginPath();
+        ctx.arc(lastX, lastInY, 6.5 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = "#10b981";
         ctx.beginPath();
         ctx.arc(lastX, lastInY, 3.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Outbound point dot
-        ctx.fillStyle = "rgba(56, 189, 248, 0.35)";
+        // Outbound point dot (radar wave)
+        ctx.fillStyle = `rgba(56, 189, 248, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastOutY, 5.5, 0, Math.PI * 2);
+        ctx.arc(lastX, lastOutY, 9.5 * pulseScale, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(56, 189, 248, ${pulseAlpha})`;
+        ctx.beginPath();
+        ctx.arc(lastX, lastOutY, 5.5 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = "#38bdf8";
         ctx.beginPath();
@@ -959,18 +972,18 @@ async function loadNetworkResults(data) {
 
         threatBarsContainer.innerHTML = `
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
-                <span style="font-size: 0.75rem; font-weight: 700; color: #f43f5e; font-family: 'JetBrains Mono', monospace;">${highSev}</span>
-                <div style="width: 100%; height: ${highH}%; background: linear-gradient(180deg, #f43f5e 0%, rgba(244, 63, 94, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s ease-out both;"></div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: #f43f5e; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) both;">${highSev}</span>
+                <div class="mini-bar-anim" style="width: 100%; height: ${highH}%; background: linear-gradient(180deg, #f43f5e 0%, rgba(244, 63, 94, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) both;"></div>
                 <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">High</span>
             </div>
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
-                <span style="font-size: 0.75rem; font-weight: 700; color: #f59e0b; font-family: 'JetBrains Mono', monospace;">${mediumSev}</span>
-                <div style="width: 100%; height: ${medH}%; background: linear-gradient(180deg, #f59e0b 0%, rgba(245, 158, 11, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s ease-out 100ms both;"></div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: #f59e0b; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) 100ms both;">${mediumSev}</span>
+                <div class="mini-bar-anim" style="width: 100%; height: ${medH}%; background: linear-gradient(180deg, #f59e0b 0%, rgba(245, 158, 11, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) 100ms both;"></div>
                 <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Medium</span>
             </div>
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
-                <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; font-family: 'JetBrains Mono', monospace;">${lowSev}</span>
-                <div style="width: 100%; height: ${lowH}%; background: linear-gradient(180deg, #10b981 0%, rgba(16, 185, 129, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s ease-out 200ms both;"></div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) 200ms both;">${lowSev}</span>
+                <div class="mini-bar-anim" style="width: 100%; height: ${lowH}%; background: linear-gradient(180deg, #10b981 0%, rgba(16, 185, 129, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) 200ms both;"></div>
                 <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Low</span>
             </div>
         `;
@@ -2262,9 +2275,9 @@ function renderMiniBars(containerId, values, barColor) {
     const max = Math.max(...values, 1);
     el.innerHTML = values.map((v, idx) => {
         const hPct = Math.max(12, Math.round((v / max) * 100));
-        // Add subtle staggered animation delay for graceful rising entry
-        const delayMs = idx * 35;
-        return `<span class="flex-1 rounded-sm opacity-85 hover:opacity-100 transition-all cursor-pointer mini-bar-anim" style="height: ${hPct}%; background-color: ${barColor}; animation: barRise 0.4s ease-out ${delayMs}ms both;" title="${v}"></span>`;
+        // Staggered physical spring rise animation
+        const delayMs = idx * 30;
+        return `<span class="flex-1 rounded-sm opacity-85 hover:opacity-100 cursor-pointer mini-bar-anim" style="height: ${hPct}%; background-color: ${barColor}; animation: barRise 0.45s var(--ease-spring-bouncy) ${delayMs}ms both;" title="${v}"></span>`;
     }).join("");
 }
 
@@ -2317,17 +2330,17 @@ function renderAnalyticsSvgChart(series) {
         <line x1="0" y1="90" x2="${W}" y2="90" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
         <line x1="0" y1="140" x2="${W}" y2="140" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
 
-        <!-- Inbound Area & Path -->
-        <polygon points="${inArea}" fill="url(#inboundGradient)" />
-        <polyline fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${inPolyline}" />
+        <!-- Inbound Area & Path with Motion Drawing Animations -->
+        <polygon points="${inArea}" fill="url(#inboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) forwards;" />
+        <polyline fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${inPolyline}" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) forwards;" />
 
-        <!-- Outbound Area & Path -->
-        <polygon points="${outArea}" fill="url(#outboundGradient)" />
-        <polyline fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${outPolyline}" />
+        <!-- Outbound Area & Path with Staggered Motion Drawing Animations -->
+        <polygon points="${outArea}" fill="url(#outboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) 0.08s forwards;" />
+        <polyline fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${outPolyline}" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) 0.08s forwards;" />
 
-        <!-- Interactive Data Dots -->
-        ${inPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#10b981" stroke="#090e1c" stroke-width="1.5"><title>Inbound: ${p.pt.inbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
-        ${outPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#38bdf8" stroke="#090e1c" stroke-width="1.5"><title>Outbound: ${p.pt.outbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
+        <!-- Interactive Data Dots with Staggered Spring Pop -->
+        ${inPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3.5" fill="#10b981" stroke="#090e1c" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22}ms both;"><title>Inbound: ${p.pt.inbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
+        ${outPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3" fill="#38bdf8" stroke="#090e1c" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22 + 80}ms both;"><title>Outbound: ${p.pt.outbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
     `;
 
     // Axis labels
