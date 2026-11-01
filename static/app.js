@@ -209,11 +209,12 @@ function switchView(targetId) {
         document.getElementById("current-page-title").textContent = titleText;
     }, 300);
 
-        // Special handling for overview or analytics to restart charts
+        // Special handling for overview or analytics to smoothly resume charts
         if (targetId === "overview-view") {
-            setTimeout(renderTelemetryChart, 350);
+            _lastTime = performance.now();
+            setTimeout(renderTelemetryChart, 150);
         } else if (targetId === "analytics-view") {
-            setTimeout(() => loadAnalyticsData(currentAnalyticsRange), 350);
+            setTimeout(() => loadAnalyticsData(currentAnalyticsRange), 150);
         } else if (targetId === "devices-view") {
             loadDevices();
         } else if (targetId === "network-view") {
@@ -276,6 +277,27 @@ async function loadLiveCollectorData() {
     }
 }
 
+function _animateNumberCounter(element, targetNum, duration = 400) {
+    if (!element) return;
+    const currentText = (element.textContent || "").replace(/[^0-9.-]/g, "");
+    const startNum = parseFloat(currentText) || 0;
+    if (startNum === targetNum) return;
+    const startTime = performance.now();
+    function step(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3);
+        const current = Math.round(startNum + (targetNum - startNum) * ease);
+        element.textContent = current.toLocaleString();
+        if (progress < 1) {
+            requestAnimationFrame(step);
+        } else {
+            element.textContent = targetNum.toLocaleString();
+        }
+    }
+    requestAnimationFrame(step);
+}
+
 function renderLiveProtocolDonut(protocols) {
     const donutSvg = document.getElementById("protocol-donut-chart");
     const legendList = document.getElementById("protocol-legend-list");
@@ -290,13 +312,16 @@ function renderLiveProtocolDonut(protocols) {
     }
 
     const totalFlows = protocols.reduce((acc, p) => acc + (p.count || 0), 0);
-    if (totalEl) totalEl.textContent = totalFlows.toLocaleString();
+    if (totalEl) _animateNumberCounter(totalEl, totalFlows);
 
     const colors = ["#10b981", "#38bdf8", "#f59e0b", "#f43f5e", "#8b5cf6"];
     const radius = 38;
     const circumference = 2 * Math.PI * radius; // ~238.76
 
     let accumulatedOffset = 0;
+    const existingSlices = donutSvg.querySelectorAll(".protocol-donut-slice");
+    const canReuseSlices = existingSlices.length === protocols.length;
+
     let circlesHtml = '<circle cx="50" cy="50" r="38" fill="transparent" stroke="#1e293b" stroke-width="12"></circle>';
     let legendHtml = '';
 
@@ -306,14 +331,23 @@ function renderLiveProtocolDonut(protocols) {
         const dashLen = pct * circumference;
         const color = colors[idx % colors.length];
 
-        circlesHtml += `
-            <circle class="protocol-donut-slice" cx="50" cy="50" r="38" fill="transparent"
-                stroke="${color}" stroke-width="12"
-                stroke-dasharray="${dashLen} ${circumference}"
-                stroke-dashoffset="${-accumulatedOffset}">
-                <title>${p.protocol}: ${count} flows (${(pct * 100).toFixed(1)}%)</title>
-            </circle>
-        `;
+        if (canReuseSlices) {
+            const sliceEl = existingSlices[idx];
+            sliceEl.setAttribute("stroke", color);
+            sliceEl.setAttribute("stroke-dasharray", `${dashLen} ${circumference}`);
+            sliceEl.setAttribute("stroke-dashoffset", `${-accumulatedOffset}`);
+            const titleEl = sliceEl.querySelector("title");
+            if (titleEl) titleEl.textContent = `${p.protocol}: ${count} flows (${(pct * 100).toFixed(1)}%)`;
+        } else {
+            circlesHtml += `
+                <circle class="protocol-donut-slice" cx="50" cy="50" r="38" fill="transparent"
+                    stroke="${color}" stroke-width="12"
+                    stroke-dasharray="${dashLen} ${circumference}"
+                    stroke-dashoffset="${-accumulatedOffset}">
+                    <title>${p.protocol}: ${count} flows (${(pct * 100).toFixed(1)}%)</title>
+                </circle>
+            `;
+        }
         accumulatedOffset += dashLen;
 
         legendHtml += `
@@ -327,7 +361,9 @@ function renderLiveProtocolDonut(protocols) {
         `;
     });
 
-    donutSvg.innerHTML = circlesHtml;
+    if (!canReuseSlices) {
+        donutSvg.innerHTML = circlesHtml;
+    }
     legendList.innerHTML = legendHtml;
 }
 async function loadOverviewData() {
@@ -335,15 +371,15 @@ async function loadOverviewData() {
         const res = await fetch("/api/overview");
         const data = await res.json();
         
-        document.getElementById("stat-investigations").textContent = data.investigations_count;
-        document.getElementById("stat-devices").textContent = data.devices_count;
-        document.getElementById("stat-baselines").textContent = data.integrity_baselines_count;
-        document.getElementById("stat-alerts").textContent = data.recent_investigations.length;
+        _animateNumberCounter(document.getElementById("stat-investigations"), data.investigations_count);
+        _animateNumberCounter(document.getElementById("stat-devices"), data.devices_count);
+        _animateNumberCounter(document.getElementById("stat-baselines"), data.integrity_baselines_count);
+        _animateNumberCounter(document.getElementById("stat-alerts"), data.recent_investigations.length);
 
         const recentList = document.getElementById("recent-investigations-list");
         if (data.recent_investigations && data.recent_investigations.length > 0) {
-            recentList.innerHTML = data.recent_investigations.map(inv => `
-                <div style="padding: 8px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            recentList.innerHTML = data.recent_investigations.map((inv, idx) => `
+                <div class="timeline-row-anim" style="padding: 8px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; animation-delay: ${idx * 35}ms;">
                     <div><strong>${escapeHtml(inv.id)}</strong>: ${escapeHtml(inv.title)}</div>
                     <span class="badge ${getInvestigationBadgeClass(inv.status)}">${escapeHtml(inv.status)}</span>
                 </div>
@@ -364,6 +400,7 @@ let _telemetryBufferOutbound = [];
 let _telemetryMaxPoints = 48;
 let _currentDisplayInbound = [];
 let _currentDisplayOutbound = [];
+let _currentDisplayMaxVal = 20;
 let _scrollOffset = 0;
 let _lastSampleAt = 0;
 let _lastTime = performance.now();
@@ -399,14 +436,18 @@ function updateTelemetrySeriesWithLiveMeasurements(newInbound, newOutbound, poin
         return;
     }
 
-    // Each poll appends one independent sample. Older samples roll off the left.
+    // Append incoming sample
     _telemetryBufferInbound.push(inbound);
     _telemetryBufferOutbound.push(outbound);
-    while (_telemetryBufferInbound.length > _telemetryMaxPoints) {
+
+    // Roll oldest points off the left edge only when buffer exceeds capacity
+    if (_telemetryBufferInbound.length > _telemetryMaxPoints) {
         _telemetryBufferInbound.shift();
         _telemetryBufferOutbound.shift();
-        if (_currentDisplayInbound.length) _currentDisplayInbound.shift();
-        if (_currentDisplayOutbound.length) _currentDisplayOutbound.shift();
+        if (_currentDisplayInbound.length > _telemetryMaxPoints) {
+            _currentDisplayInbound.shift();
+            _currentDisplayOutbound.shift();
+        }
     }
 }
 
@@ -431,9 +472,37 @@ function _updateTelemetryHeader(metric) {
     }
 }
 
+function _drawSmoothWaveform(ctx, values, minVal, maxVal, height, stepX, shift) {
+    if (!values || values.length < 2) return;
+    const coords = values.map((val, idx) => ({
+        x: idx * stepX - shift,
+        y: height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15
+    }));
+    ctx.moveTo(coords[0].x, coords[0].y);
+    for (let i = 0; i < coords.length - 1; i++) {
+        const p0 = coords[i];
+        const p1 = coords[i + 1];
+        const midX = (p0.x + p1.x) / 2;
+        const midY = (p0.y + p1.y) / 2;
+        ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
+    }
+    const last = coords[coords.length - 1];
+    ctx.lineTo(last.x, last.y);
+}
+
 function renderTelemetryChart() {
     const canvas = document.getElementById("telemetry-canvas");
     if (!canvas) return;
+
+    // Performance: pause animation when canvas is not visible or element is hidden in background tab/view
+    if (telemetryPaused || document.hidden || canvas.offsetParent === null) {
+        if (_telemetryAnimFrame) {
+            cancelAnimationFrame(_telemetryAnimFrame);
+            _telemetryAnimFrame = null;
+        }
+        return;
+    }
+
     const ctx = canvas.getContext("2d");
     const metricElem = document.getElementById("telemetry-metric");
     const metric = metricElem ? metricElem.value : "bandwidth";
@@ -466,9 +535,9 @@ function renderTelemetryChart() {
 
     if (!telemetryPaused) {
         _phase += dt * 2.5;
-        // Advance the window between polls so the curve keeps evolving, not only on fetch.
+        // Continuous temporal evolution between incoming polls
         const sinceSample = _lastSampleAt ? (now - _lastSampleAt) / 1000 : 1;
-        _scrollOffset = Math.min(sinceSample / 2.4, 0.92);
+        _scrollOffset = Math.min(sinceSample / 2.5, 0.95);
     }
 
     while (_currentDisplayInbound.length < _telemetryBufferInbound.length) {
@@ -481,16 +550,16 @@ function renderTelemetryChart() {
         _currentDisplayOutbound.length = _telemetryBufferOutbound.length;
     }
 
-    // Ease each series toward its own samples, plus a small live ripple between polls.
+    // Spring interpolation: smoothly ease displayed curve towards target measurements
+    const springLerp = telemetryPaused ? 1 : Math.min(1 - Math.exp(-dt * 6.5), 0.35);
     for (let i = 0; i < _telemetryBufferInbound.length; i++) {
         const edge = i / Math.max(_telemetryBufferInbound.length - 1, 1);
         const targetIn = _telemetryBufferInbound[i];
         const targetOut = _telemetryBufferOutbound[i];
-        const microIn = Math.sin(_phase * 1.15 + i * 0.62) * targetIn * (0.015 + edge * 0.035);
-        const microOut = Math.cos(_phase * 0.86 + i * 0.41) * targetOut * (0.02 + (1 - edge) * 0.03);
-        const follow = telemetryPaused ? 1 : 0.08 + dt * 2.4;
-        _currentDisplayInbound[i] += ((targetIn + microIn) - _currentDisplayInbound[i]) * Math.min(follow, 0.45);
-        _currentDisplayOutbound[i] += ((targetOut + microOut) - _currentDisplayOutbound[i]) * Math.min(follow, 0.45);
+        const microIn = Math.sin(_phase * 1.15 + i * 0.62) * targetIn * (0.012 + edge * 0.026);
+        const microOut = Math.cos(_phase * 0.86 + i * 0.41) * targetOut * (0.015 + (1 - edge) * 0.025);
+        _currentDisplayInbound[i] += ((targetIn + microIn) - _currentDisplayInbound[i]) * springLerp;
+        _currentDisplayOutbound[i] += ((targetOut + microOut) - _currentDisplayOutbound[i]) * springLerp;
     }
 
     _updateTelemetryHeader(metric);
@@ -498,10 +567,12 @@ function renderTelemetryChart() {
     const inValues = _currentDisplayInbound;
     const outValues = _currentDisplayOutbound;
 
-    // Dynamic adaptive Y-axis range
+    // Smooth adaptive Y-axis range with spring tracking — zero vertical snapping
     const peak = Math.max(0, ...inValues, ...outValues);
     const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
-    const maxVal = Math.max(peak * 1.18, floor);
+    const targetMaxVal = Math.max(peak * 1.18, floor);
+    _currentDisplayMaxVal += (targetMaxVal - _currentDisplayMaxVal) * (1 - Math.exp(-dt * 4.5));
+    const maxVal = Math.max(_currentDisplayMaxVal, floor);
     const minVal = 0;
 
     ctx.clearRect(0, 0, width, height);
@@ -521,18 +592,14 @@ function renderTelemetryChart() {
     const stepX = width / span;
     const shift = telemetryPaused ? 0 : _scrollOffset * stepX;
 
-    // 1. Inbound Area & Curve (Emerald #10b981)
+    // 1. Inbound Area & Smooth Waveform (Emerald #10b981)
     const inGrad = ctx.createLinearGradient(0, 0, 0, height);
     inGrad.addColorStop(0, "rgba(16, 185, 129, 0.22)");
     inGrad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
     ctx.fillStyle = inGrad;
     ctx.beginPath();
     ctx.moveTo(0, height);
-    inValues.forEach((val, idx) => {
-        const x = idx * stepX - shift;
-        const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15;
-        ctx.lineTo(x, y);
-    });
+    _drawSmoothWaveform(ctx, inValues, minVal, maxVal, height, stepX, shift);
     ctx.lineTo(width, height);
     ctx.closePath();
     ctx.fill();
@@ -540,43 +607,32 @@ function renderTelemetryChart() {
     ctx.strokeStyle = "#10b981";
     ctx.lineWidth = 2.2;
     ctx.lineJoin = "round";
+    ctx.lineCap = "round";
     ctx.beginPath();
-    inValues.forEach((val, idx) => {
-        const x = idx * stepX - shift;
-        const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15;
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
+    _drawSmoothWaveform(ctx, inValues, minVal, maxVal, height, stepX, shift);
     ctx.stroke();
 
-    // 2. Outbound Area & Curve (Sky Blue #38bdf8)
+    // 2. Outbound Area & Smooth Waveform (Sky Blue #38bdf8)
     const outGrad = ctx.createLinearGradient(0, 0, 0, height);
     outGrad.addColorStop(0, "rgba(56, 189, 248, 0.16)");
     outGrad.addColorStop(1, "rgba(56, 189, 248, 0.0)");
     ctx.fillStyle = outGrad;
     ctx.beginPath();
     ctx.moveTo(0, height);
-    outValues.forEach((val, idx) => {
-        const x = idx * stepX - shift;
-        const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15;
-        ctx.lineTo(x, y);
-    });
+    _drawSmoothWaveform(ctx, outValues, minVal, maxVal, height, stepX, shift);
     ctx.lineTo(width, height);
     ctx.closePath();
     ctx.fill();
 
     ctx.strokeStyle = "#38bdf8";
     ctx.lineWidth = 1.8;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
     ctx.beginPath();
-    outValues.forEach((val, idx) => {
-        const x = idx * stepX - shift;
-        const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15;
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
+    _drawSmoothWaveform(ctx, outValues, minVal, maxVal, height, stepX, shift);
     ctx.stroke();
 
-    // Glowing real-time pulse dots on arriving edge
+    // Glowing real-time pulse dots on arriving edge with harmonic breathing wave
     if (inValues.length > 0) {
         const lastIdx = inValues.length - 1;
         const lastX = lastIdx * stepX - shift;
@@ -994,11 +1050,11 @@ async function loadNetworkResults(data) {
     const tbody = document.querySelector("#network-events-table tbody");
     if (tbody) {
         if (data && data.events && data.events.length > 0) {
-            tbody.innerHTML = data.events.map(e => {
+            tbody.innerHTML = data.events.map((e, idx) => {
                 const sev = (e.severity || "low").toLowerCase();
                 const badgeClass = sev === "high" || sev === "danger" ? "badge-danger" : sev === "medium" || sev === "warning" ? "badge-warning" : "badge-success";
                 return `
-                    <tr>
+                    <tr class="timeline-row-anim" style="animation-delay: ${idx * 25}ms;">
                         <td>${escapeHtml(e.timestamp)}</td>
                         <td><span class="badge ${badgeClass}">${escapeHtml(e.severity || "low")}</span></td>
                         <td><code>${escapeHtml(e.rule_id)}</code></td>
@@ -2225,7 +2281,7 @@ function renderAnalyticsUI(data) {
 
     // 2. Metric 1: Throughput
     const m_tp_val = document.getElementById("m-tp-val");
-    if (m_tp_val) m_tp_val.textContent = m.throughput.value;
+    if (m_tp_val) _animateNumberCounter(m_tp_val, m.throughput.value);
     const m_tp_pill = document.getElementById("m-tp-pill");
     if (m_tp_pill) {
         const sign = m.throughput.change_pct >= 0 ? "+" : "";
@@ -2236,7 +2292,7 @@ function renderAnalyticsUI(data) {
 
     // 3. Metric 2: Threat Events
     const m_threat_val = document.getElementById("m-threat-val");
-    if (m_threat_val) m_threat_val.textContent = m.threats.value;
+    if (m_threat_val) _animateNumberCounter(m_threat_val, m.threats.value);
     const m_threat_pill = document.getElementById("m-threat-pill");
     if (m_threat_pill) {
         const sign = m.threats.change_pct >= 0 ? "+" : "";
@@ -2247,7 +2303,7 @@ function renderAnalyticsUI(data) {
 
     // 4. Metric 3: Active Hosts
     const m_hosts_val = document.getElementById("m-hosts-val");
-    if (m_hosts_val) m_hosts_val.textContent = m.hosts.value;
+    if (m_hosts_val) _animateNumberCounter(m_hosts_val, m.hosts.value);
     const m_hosts_pill = document.getElementById("m-hosts-pill");
     if (m_hosts_pill) {
         const sign = m.hosts.change_abs >= 0 ? "+" : "";
@@ -2258,7 +2314,7 @@ function renderAnalyticsUI(data) {
 
     // 5. Metric 4: Average Latency
     const m_lat_val = document.getElementById("m-lat-val");
-    if (m_lat_val) m_lat_val.textContent = m.latency.value;
+    if (m_lat_val) _animateNumberCounter(m_lat_val, m.latency.value);
     const m_lat_pill = document.getElementById("m-lat-pill");
     if (m_lat_pill) {
         const sign = m.latency.change_diff >= 0 ? "+" : "";
@@ -2275,12 +2331,37 @@ function renderMiniBars(containerId, values, barColor) {
     const el = document.getElementById(containerId);
     if (!el || !values || !values.length) return;
     const max = Math.max(...values, 1);
+    const existingBars = el.querySelectorAll(".mini-bar-anim");
+    if (existingBars.length === values.length) {
+        // Reuse DOM and smoothly transition heights via CSS spring without redraw flicker
+        values.forEach((v, idx) => {
+            const hPct = Math.max(12, Math.round((v / max) * 100));
+            existingBars[idx].style.height = `${hPct}%`;
+            existingBars[idx].title = v;
+            if (barColor) existingBars[idx].style.backgroundColor = barColor;
+        });
+        return;
+    }
+    // Initial mount: build DOM with staggered spring rise
     el.innerHTML = values.map((v, idx) => {
         const hPct = Math.max(12, Math.round((v / max) * 100));
-        // Staggered physical spring rise animation
-        const delayMs = idx * 30;
+        const delayMs = idx * 28;
         return `<span class="flex-1 rounded-sm opacity-85 hover:opacity-100 cursor-pointer mini-bar-anim" style="height: ${hPct}%; background-color: ${barColor}; animation: barRise 0.45s var(--ease-spring-bouncy) ${delayMs}ms both;" title="${v}"></span>`;
     }).join("");
+}
+
+function _buildSvgSmoothPath(pts) {
+    if (!pts || pts.length === 0) return "";
+    if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+        const midX = (pts[i].x + pts[i + 1].x) / 2;
+        const midY = (pts[i].y + pts[i + 1].y) / 2;
+        d += ` Q ${pts[i].x} ${pts[i].y}, ${midX} ${midY}`;
+    }
+    const last = pts[pts.length - 1];
+    d += ` L ${last.x} ${last.y}`;
+    return d;
 }
 
 function renderAnalyticsSvgChart(series) {
@@ -2310,10 +2391,10 @@ function renderAnalyticsSvgChart(series) {
         return { x, y, pt };
     });
 
-    const inPolyline = inPoints.map(p => `${p.x},${p.y}`).join(" ");
-    const outPolyline = outPoints.map(p => `${p.x},${p.y}`).join(" ");
-    const inArea = `0,${H} ` + inPolyline + ` ${W},${H}`;
-    const outArea = `0,${H} ` + outPolyline + ` ${W},${H}`;
+    const inPath = _buildSvgSmoothPath(inPoints);
+    const outPath = _buildSvgSmoothPath(outPoints);
+    const inArea = `${inPath} L ${W} ${H} L 0 ${H} Z`;
+    const outArea = `${outPath} L ${W} ${H} L 0 ${H} Z`;
 
     svg.innerHTML = `
         <defs>
@@ -2332,13 +2413,13 @@ function renderAnalyticsSvgChart(series) {
         <line x1="0" y1="90" x2="${W}" y2="90" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
         <line x1="0" y1="140" x2="${W}" y2="140" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
 
-        <!-- Inbound Area & Path with Motion Drawing Animations -->
-        <polygon points="${inArea}" fill="url(#inboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) forwards;" />
-        <polyline fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${inPolyline}" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) forwards;" />
+        <!-- Inbound Area & Smooth Waveform with Motion Drawing Animations -->
+        <path d="${inArea}" fill="url(#inboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) forwards;" />
+        <path d="${inPath}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) forwards;" />
 
-        <!-- Outbound Area & Path with Staggered Motion Drawing Animations -->
-        <polygon points="${outArea}" fill="url(#outboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) 0.08s forwards;" />
-        <polyline fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${outPolyline}" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) 0.08s forwards;" />
+        <!-- Outbound Area & Smooth Waveform with Staggered Motion Drawing Animations -->
+        <path d="${outArea}" fill="url(#outboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) 0.08s forwards;" />
+        <path d="${outPath}" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) 0.08s forwards;" />
 
         <!-- Interactive Data Dots with Staggered Spring Pop -->
         ${inPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3.5" fill="#10b981" stroke="#090e1c" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22}ms both;"><title>Inbound: ${p.pt.inbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}

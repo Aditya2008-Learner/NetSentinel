@@ -1867,7 +1867,7 @@ input[type="file"]::-webkit-file-upload-button:hover {
 /* Micro-interactions for interactive graph elements */
 .mini-bar-anim {
     transform-origin: bottom;
-    transition: transform 0.22s var(--ease-spring-snappy), filter 0.2s ease, opacity 0.2s ease;
+    transition: height 0.4s var(--ease-spring-bouncy), transform 0.22s var(--ease-spring-snappy), filter 0.2s ease, opacity 0.2s ease;
 }
 
 .mini-bar-anim:hover {
@@ -1906,6 +1906,42 @@ input[type="file"]::-webkit-file-upload-button:hover {
 #telemetry-canvas, #analytics-svg-chart {
     transition: opacity 0.3s ease;
     animation: graphReveal 0.4s var(--ease-spring-snappy);
+}
+
+/* Timeline & Event Row Entrance Animation */
+@keyframes timelineRowEnter {
+    0% {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.timeline-row-anim {
+    animation: timelineRowEnter 0.32s var(--ease-spring-snappy) both;
+}
+
+/* View Panel Coordinated Transitions */
+.view-panel {
+    transition: opacity 0.25s var(--ease-spring-snappy), transform 0.25s var(--ease-spring-snappy);
+}
+
+.view-panel.active {
+    animation: viewPanelEnter 0.28s var(--ease-spring-snappy) both;
+}
+
+@keyframes viewPanelEnter {
+    0% {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

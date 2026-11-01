@@ -267,4 +267,21 @@
     if (!reduced) {
         window.setInterval(spawnEvent, 4200);
     }
+
+    // Motion performance: pause animation loop when hero canvas is scrolled offscreen
+    if ("IntersectionObserver" in window) {
+        var canvasObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (!entry.isIntersecting) {
+                    if (rafId) {
+                        cancelAnimationFrame(rafId);
+                        rafId = 0;
+                    }
+                } else if (!reduced && !rafId) {
+                    rafId = requestAnimationFrame(animate);
+                }
+            });
+        }, { threshold: 0.05 });
+        canvasObserver.observe(canvas);
+    }
 })();
