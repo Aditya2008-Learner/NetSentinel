@@ -26,6 +26,33 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+// Pause polling when the tab is hidden; resume when visible again.
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+        _stopTelemetryInterval();
+    } else if (!telemetryPaused) {
+        _startTelemetryInterval();
+        loadTelemetryGraph();
+    }
+});
+
+// Prevent default drag and drop behavior across window
+window.addEventListener("dragover", (e) => {
+    e.preventDefault();
+}, false);
+
+window.addEventListener("drop", (e) => {
+    e.preventDefault();
+}, false);
+
+// Wire all interactive event listeners after DOM is fully loaded
+document.addEventListener("DOMContentLoaded", () => {
+    initNavigation();
+    initForms();
+    initGlobalSearch();
+    loadOverviewData();
+    initTelemetryChart();
+
     // Mobile navigation drawer toggle wiring
     const hamburgerBtn = document.getElementById("hamburger-btn");
     const sidebar = document.getElementById("sidebar");
@@ -54,6 +81,7 @@ function escapeHtml(str) {
             closeMobileMenu();
         });
     });
+
     const telemetryRangeEl = document.getElementById("telemetry-range");
     if (telemetryRangeEl) telemetryRangeEl.addEventListener("change", loadTelemetryGraph);
 
@@ -128,25 +156,7 @@ function escapeHtml(str) {
             if (target) switchView(target);
         });
     });
-
-// Pause polling when the tab is hidden; resume when visible again.
-document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-        _stopTelemetryInterval();
-    } else if (!telemetryPaused) {
-        _startTelemetryInterval();
-        loadTelemetryGraph();
-    }
 });
-
-// Prevent default drag and drop behavior across window to prevent browser navigation to file:///
-window.addEventListener("dragover", (e) => {
-    e.preventDefault();
-}, false);
-
-window.addEventListener("drop", (e) => {
-    e.preventDefault();
-}, false);
 
 // Initialize navigation with smooth transitions
 function initNavigation() {
