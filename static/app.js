@@ -86,7 +86,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (telemetryRangeEl) telemetryRangeEl.addEventListener("change", loadTelemetryGraph);
 
     const telemetryMetricEl = document.getElementById("telemetry-metric");
-    if (telemetryMetricEl) telemetryMetricEl.addEventListener("change", renderTelemetryChart);
+    if (telemetryMetricEl) telemetryMetricEl.addEventListener("change", () => {
+        _telemetryMetricDirty = true;
+        renderTelemetryChart();
+    });
 
     const telemetryToggleBtn = document.getElementById("telemetry-toggle-btn");
     if (telemetryToggleBtn) telemetryToggleBtn.addEventListener("click", toggleTelemetryLive);
@@ -359,31 +362,69 @@ async function loadOverviewData() {
 let _telemetryAnimFrame = null;
 let _telemetryBufferInbound = [];
 let _telemetryBufferOutbound = [];
-let _telemetryMaxPoints = 40;
+let _telemetryMaxPoints = 48;
 let _currentDisplayInbound = [];
 let _currentDisplayOutbound = [];
+let _scrollOffset = 0;
+let _lastSampleAt = 0;
 let _lastTime = performance.now();
 let _phase = 0;
+let _latestTelemetryPoint = null;
+let _telemetryMetricDirty = false;
+let _activeTelemetryMetric = "bandwidth";
 
-function updateTelemetrySeriesWithLiveMeasurements(newInbound, newOutbound) {
+function _metricPair(point, metric) {
+    if (!point) return [0, 0];
+    if (metric === "packets") return [point.packets_per_sec || 0, (point.packets_per_sec || 0) * 0.42];
+    if (metric === "latency") return [point.latency_ms || 0, Math.max(0, (point.latency_ms || 0) * 0.55)];
+    return [point.inbound_mbps || 0, point.outbound_mbps || 0];
+}
+
+function updateTelemetrySeriesWithLiveMeasurements(newInbound, newOutbound, point) {
+    const inbound = Number.isFinite(newInbound) ? Math.max(0, newInbound) : 0;
+    const outbound = Number.isFinite(newOutbound) ? Math.max(0, newOutbound) : 0;
+    if (point) _latestTelemetryPoint = point;
+    _lastSampleAt = performance.now();
+
     if (_telemetryBufferInbound.length === 0) {
-        // Seed buffer with baseline curve
         for (let i = 0; i < _telemetryMaxPoints; i++) {
-            const seedIn = Math.max(2, (newInbound || 24) + Math.sin(i * 0.4) * 6);
-            const seedOut = Math.max(1, (newOutbound || 12) + Math.cos(i * 0.3) * 4);
+            const t = i / _telemetryMaxPoints;
+            const seedIn = Math.max(0.4, inbound * (0.55 + t * 0.45) + Math.sin(i * 0.55) * inbound * 0.08);
+            const seedOut = Math.max(0.2, outbound * (0.45 + t * 0.55) + Math.cos(i * 0.37) * outbound * 0.1);
             _telemetryBufferInbound.push(seedIn);
             _telemetryBufferOutbound.push(seedOut);
             _currentDisplayInbound.push(seedIn);
             _currentDisplayOutbound.push(seedOut);
         }
+        return;
+    }
+
+    // Each poll appends one independent sample. Older samples roll off the left.
+    _telemetryBufferInbound.push(inbound);
+    _telemetryBufferOutbound.push(outbound);
+    while (_telemetryBufferInbound.length > _telemetryMaxPoints) {
+        _telemetryBufferInbound.shift();
+        _telemetryBufferOutbound.shift();
+        if (_currentDisplayInbound.length) _currentDisplayInbound.shift();
+        if (_currentDisplayOutbound.length) _currentDisplayOutbound.shift();
+    }
+}
+
+function _updateTelemetryHeader(metric) {
+    const point = _latestTelemetryPoint;
+    const pEl = document.getElementById("telemetry-stat-primary");
+    const sEl = document.getElementById("telemetry-stat-secondary");
+    if (!point || !pEl) return;
+    if (metric === "packets") {
+        pEl.textContent = `Live Rate: ${Math.round(point.packets_per_sec || 0)} pps`;
+    } else if (metric === "latency") {
+        pEl.textContent = `Live Latency: ${Number(point.latency_ms || 0).toFixed(1)} ms`;
     } else {
-        // Push incoming measurement into right edge and shift old points off left edge
-        _telemetryBufferInbound.push(newInbound);
-        _telemetryBufferOutbound.push(newOutbound);
-        if (_telemetryBufferInbound.length > _telemetryMaxPoints) {
-            _telemetryBufferInbound.shift();
-            _telemetryBufferOutbound.shift();
-        }
+        pEl.textContent = `Live Inbound: ${Number(point.inbound_mbps || 0).toFixed(1)} Mbps`;
+    }
+    if (sEl && !sEl.textContent.startsWith("Updated")) {
+        const out = metric === "bandwidth" ? `${Number(point.outbound_mbps || 0).toFixed(1)} Mbps out` : "Live agent";
+        sEl.textContent = out;
     }
 }
 
@@ -393,6 +434,19 @@ function renderTelemetryChart() {
     const ctx = canvas.getContext("2d");
     const metricElem = document.getElementById("telemetry-metric");
     const metric = metricElem ? metricElem.value : "bandwidth";
+    if (_telemetryMetricDirty || metric !== _activeTelemetryMetric) {
+        _telemetryMetricDirty = false;
+        _activeTelemetryMetric = metric;
+        _telemetryBufferInbound = [];
+        _telemetryBufferOutbound = [];
+        _currentDisplayInbound = [];
+        _currentDisplayOutbound = [];
+        _scrollOffset = 0;
+        if (_latestTelemetryPoint) {
+            const pair = _metricPair(_latestTelemetryPoint, metric);
+            updateTelemetrySeriesWithLiveMeasurements(pair[0], pair[1], _latestTelemetryPoint);
+        }
+    }
 
     const containerWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 600;
     const targetWidth = Math.max(containerWidth - 24, 300);
@@ -408,33 +462,43 @@ function renderTelemetryChart() {
     _lastTime = now;
 
     if (!telemetryPaused) {
-        _phase += dt * 2.5; // continuous subtle temporal evolution
+        _phase += dt * 2.5;
+        // Advance the window between polls so the curve keeps evolving, not only on fetch.
+        const sinceSample = _lastSampleAt ? (now - _lastSampleAt) / 1000 : 1;
+        _scrollOffset = Math.min(sinceSample / 2.4, 0.92);
     }
 
-    // Ensure display buffers match length
     while (_currentDisplayInbound.length < _telemetryBufferInbound.length) {
-        _currentDisplayInbound.push(_telemetryBufferInbound[_currentDisplayInbound.length] || 10);
-        _currentDisplayOutbound.push(_telemetryBufferOutbound[_currentDisplayOutbound.length] || 5);
+        const idx = _currentDisplayInbound.length;
+        _currentDisplayInbound.push(_telemetryBufferInbound[idx] || 0);
+        _currentDisplayOutbound.push(_telemetryBufferOutbound[idx] || 0);
+    }
+    if (_currentDisplayInbound.length > _telemetryBufferInbound.length) {
+        _currentDisplayInbound.length = _telemetryBufferInbound.length;
+        _currentDisplayOutbound.length = _telemetryBufferOutbound.length;
     }
 
-    // Smoothly interpolate display points toward target buffer values + organic live pulse
+    // Ease each series toward its own samples, plus a small live ripple between polls.
     for (let i = 0; i < _telemetryBufferInbound.length; i++) {
+        const edge = i / Math.max(_telemetryBufferInbound.length - 1, 1);
         const targetIn = _telemetryBufferInbound[i];
         const targetOut = _telemetryBufferOutbound[i];
-        
-        // Micro-organic fluctuation on active measurements to simulate continuous packet arrival
-        const microIn = Math.sin(_phase + i * 0.45) * (targetIn * 0.04);
-        const microOut = Math.cos(_phase * 1.2 + i * 0.5) * (targetOut * 0.05);
-
-        _currentDisplayInbound[i] += ((targetIn + microIn) - _currentDisplayInbound[i]) * 0.14;
-        _currentDisplayOutbound[i] += ((targetOut + microOut) - _currentDisplayOutbound[i]) * 0.14;
+        const microIn = Math.sin(_phase * 1.15 + i * 0.62) * targetIn * (0.015 + edge * 0.035);
+        const microOut = Math.cos(_phase * 0.86 + i * 0.41) * targetOut * (0.02 + (1 - edge) * 0.03);
+        const follow = telemetryPaused ? 1 : 0.08 + dt * 2.4;
+        _currentDisplayInbound[i] += ((targetIn + microIn) - _currentDisplayInbound[i]) * Math.min(follow, 0.45);
+        _currentDisplayOutbound[i] += ((targetOut + microOut) - _currentDisplayOutbound[i]) * Math.min(follow, 0.45);
     }
+
+    _updateTelemetryHeader(metric);
 
     const inValues = _currentDisplayInbound;
     const outValues = _currentDisplayOutbound;
 
     // Dynamic adaptive Y-axis range
-    const maxVal = Math.max(Math.max(...inValues, ...outValues) * 1.15, 15);
+    const peak = Math.max(0, ...inValues, ...outValues);
+    const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
+    const maxVal = Math.max(peak * 1.18, floor);
     const minVal = 0;
 
     ctx.clearRect(0, 0, width, height);
@@ -450,7 +514,9 @@ function renderTelemetryChart() {
         ctx.stroke();
     }
 
-    const stepX = width / (inValues.length - 1 || 1);
+    const span = Math.max(inValues.length - 1, 1);
+    const stepX = width / span;
+    const shift = telemetryPaused ? 0 : _scrollOffset * stepX;
 
     // 1. Inbound Area & Curve (Emerald #10b981)
     const inGrad = ctx.createLinearGradient(0, 0, 0, height);
@@ -460,7 +526,7 @@ function renderTelemetryChart() {
     ctx.beginPath();
     ctx.moveTo(0, height);
     inValues.forEach((val, idx) => {
-        const x = idx * stepX;
+        const x = idx * stepX - shift;
         const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15;
         ctx.lineTo(x, y);
     });
@@ -473,7 +539,7 @@ function renderTelemetryChart() {
     ctx.lineJoin = "round";
     ctx.beginPath();
     inValues.forEach((val, idx) => {
-        const x = idx * stepX;
+        const x = idx * stepX - shift;
         const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
@@ -488,7 +554,7 @@ function renderTelemetryChart() {
     ctx.beginPath();
     ctx.moveTo(0, height);
     outValues.forEach((val, idx) => {
-        const x = idx * stepX;
+        const x = idx * stepX - shift;
         const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15;
         ctx.lineTo(x, y);
     });
@@ -500,7 +566,7 @@ function renderTelemetryChart() {
     ctx.lineWidth = 1.8;
     ctx.beginPath();
     outValues.forEach((val, idx) => {
-        const x = idx * stepX;
+        const x = idx * stepX - shift;
         const y = height - ((val - minVal) / (maxVal - minVal)) * (height - 30) - 15;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
@@ -510,7 +576,7 @@ function renderTelemetryChart() {
     // Glowing real-time pulse dots on arriving edge
     if (inValues.length > 0) {
         const lastIdx = inValues.length - 1;
-        const lastX = lastIdx * stepX;
+        const lastX = lastIdx * stepX - shift;
         const lastInY = height - ((inValues[lastIdx] - minVal) / (maxVal - minVal)) * (height - 30) - 15;
         const lastOutY = height - ((outValues[lastIdx] - minVal) / (maxVal - minVal)) * (height - 30) - 15;
 
@@ -535,35 +601,6 @@ function renderTelemetryChart() {
         ctx.fill();
     }
 
-    // Schedule next frame
-    if (!telemetryPaused && !document.hidden) {
-        _telemetryAnimFrame = requestAnimationFrame(renderTelemetryChart);
-    }
-}
-
-    // Update Header Stats
-    if (metric === "bandwidth") {
-        const peak = Math.max(...series.map(s => s.inbound_mbps));
-        const pEl = document.getElementById("telemetry-stat-primary");
-        if (pEl) pEl.textContent = `Peak Inbound: ${peak} Mbps`;
-        const avgLat = (series.reduce((acc, s) => acc + s.latency_ms, 0) / series.length).toFixed(1);
-        const sEl = document.getElementById("telemetry-stat-secondary");
-        if (sEl) sEl.textContent = `Avg Latency: ${avgLat} ms`;
-    } else if (metric === "packets") {
-        const peakPps = Math.max(...series.map(s => s.packets_per_sec));
-        const pEl = document.getElementById("telemetry-stat-primary");
-        if (pEl) pEl.textContent = `Peak Rate: ${peakPps} pps`;
-        const sEl = document.getElementById("telemetry-stat-secondary");
-        if (sEl) sEl.textContent = `Source: Standalone Agent`;
-    } else {
-        const peakLat = Math.max(...series.map(s => s.latency_ms));
-        const pEl = document.getElementById("telemetry-stat-primary");
-        if (pEl) pEl.textContent = `Peak Latency: ${peakLat} ms`;
-        const sEl = document.getElementById("telemetry-stat-secondary");
-        if (sEl) sEl.textContent = `Status: Stable`;
-    }
-
-    // Schedule next continuous animation frame when active
     if (!telemetryPaused && !document.hidden) {
         _telemetryAnimFrame = requestAnimationFrame(renderTelemetryChart);
     }
@@ -699,7 +736,10 @@ async function loadTelemetryGraph() {
         // Feed newest telemetry measurement into rolling continuous buffer
         if (data.series.length > 0) {
             const latestPoint = data.series[data.series.length - 1];
-            updateTelemetrySeriesWithLiveMeasurements(latestPoint.inbound_mbps, latestPoint.outbound_mbps);
+            const metricElem = document.getElementById("telemetry-metric");
+            const metric = metricElem ? metricElem.value : "bandwidth";
+            const pair = _metricPair(latestPoint, metric);
+            updateTelemetrySeriesWithLiveMeasurements(pair[0], pair[1], latestPoint);
         }
 
         renderTelemetryChart();
