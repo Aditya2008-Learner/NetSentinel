@@ -1053,6 +1053,8 @@ input[type="file"]::-webkit-file-upload-button:hover {
     padding: 32px;
     width: 100%;
     max-width: 540px;
+    max-height: 90vh;
+    overflow-y: auto;
     box-shadow: var(--shadow-modal);
     animation: modalIn var(--transition-smooth) forwards;
 }
@@ -1340,17 +1342,6 @@ input[type="file"]::-webkit-file-upload-button:hover {
     .forensics-indicators-card,
     .forensics-grid > div[style*="grid-column: span 2"] {
         grid-column: span 1 !important;
-    }
-    .sidebar {
-        width: 72px;
-        padding: 16px 8px;
-    }
-    .brand-text, .nav-item span, .demo-badge span {
-        display: none;
-    }
-    .nav-item {
-        justify-content: center;
-        padding: 12px;
     }
     .top-nav {
         padding: 0 16px;

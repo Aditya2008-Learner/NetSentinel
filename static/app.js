@@ -50,6 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     initForms();
     initGlobalSearch();
+    initModals();
     loadOverviewData();
     initTelemetryChart();
 
@@ -456,17 +457,20 @@ function _updateTelemetryHeader(metric) {
     const pEl = document.getElementById("telemetry-stat-primary");
     const sEl = document.getElementById("telemetry-stat-secondary");
     if (!point || !pEl) return;
+    const isLive = latestTelemetryData && latestTelemetryData.data_source === "REAL_COLLECTOR";
+    const sourceLabel = isLive ? "Live Collector" : "Demo Simulation";
+
     if (metric === "packets") {
-        pEl.textContent = `Live Rate: ${Math.round(point.packets_per_sec || 0)} pps`;
+        pEl.textContent = `Rate: ${Math.round(point.packets_per_sec || 0)} pps`;
     } else if (metric === "latency") {
-        pEl.textContent = `Live Latency: ${Number(point.latency_ms || 0).toFixed(1)} ms`;
+        pEl.textContent = `Latency: ${Number(point.latency_ms || 0).toFixed(1)} ms`;
     } else {
-        pEl.textContent = `Live Inbound: ${Number(point.inbound_mbps || 0).toFixed(1)} Mbps`;
+        pEl.textContent = `Throughput: ${Number(point.inbound_mbps || 0).toFixed(1)} Mbps`;
     }
     if (sEl) {
         const out = metric === "bandwidth"
-            ? `Outbound: ${Number(point.outbound_mbps || 0).toFixed(1)} Mbps`
-            : (metric === "latency" ? "Status: Stable" : "Source: Live Agent");
+            ? `Outbound: ${Number(point.outbound_mbps || 0).toFixed(1)} Mbps • ${sourceLabel}`
+            : (metric === "latency" ? `Status: Stable • ${sourceLabel}` : `Source: ${sourceLabel}`);
         const suffix = _telemetryLastUpdated ? ` (${_telemetryLastUpdated} UTC)` : "";
         sEl.textContent = `${out}${suffix}`;
     }
@@ -494,12 +498,13 @@ function renderTelemetryChart() {
     const canvas = document.getElementById("telemetry-canvas");
     if (!canvas) return;
 
+    if (_telemetryAnimFrame) {
+        cancelAnimationFrame(_telemetryAnimFrame);
+        _telemetryAnimFrame = null;
+    }
+
     // Performance: pause animation when canvas is not visible or element is hidden in background tab/view
     if (telemetryPaused || document.hidden || canvas.offsetParent === null) {
-        if (_telemetryAnimFrame) {
-            cancelAnimationFrame(_telemetryAnimFrame);
-            _telemetryAnimFrame = null;
-        }
         return;
     }
 
@@ -517,18 +522,25 @@ function renderTelemetryChart() {
         if (_latestTelemetryPoint) {
             const pair = _metricPair(_latestTelemetryPoint, metric);
             updateTelemetrySeriesWithLiveMeasurements(pair[0], pair[1], _latestTelemetryPoint);
+            const peak = Math.max(pair[0], pair[1]);
+            const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
+            _currentDisplayMaxVal = Math.max(peak * 1.18, floor);
         }
     }
 
     const containerWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 600;
-    const targetWidth = Math.max(containerWidth - 24, 300);
+    const targetWidth = Math.max(containerWidth - 8, 200);
     const targetHeight = 180;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-    if (canvas.width !== targetWidth) canvas.width = targetWidth;
-    if (canvas.height !== targetHeight) canvas.height = targetHeight;
+    if (canvas.width !== Math.floor(targetWidth * dpr) || canvas.height !== Math.floor(targetHeight * dpr)) {
+        canvas.width = Math.floor(targetWidth * dpr);
+        canvas.height = Math.floor(targetHeight * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const width = targetWidth;
+    const height = targetHeight;
     const now = performance.now();
     const dt = Math.min((now - _lastTime) / 1000, 0.1);
     _lastTime = now;
@@ -1629,7 +1641,7 @@ function initForms() {
                         <strong>Computed SHA-256:</strong>
                         <code style="font-size: 0.82rem; word-break: break-all; background: #060a12; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); display: block; margin-top: 4px; position: relative;">
                             ${escapeHtml(data.current_sha256)}
-                            <button type="button" class="btn btn-secondary" onclick="navigator.clipboard.writeText('${escapeHtml(data.current_sha256)}').then(() => showNotification('SHA-256 hash copied to clipboard', 'success')).catch(() => showNotification('Failed to copy hash', 'error'))" style="position: absolute; top: 6px; right: 6px; padding: 2px 8px; font-size: 0.7rem; background: var(--bg-surface-elevated); border: 1px solid var(--border-default); border-radius: 4px; cursor: pointer;">
+                            <button type="button" class="btn btn-secondary copy-hash-btn" data-hash="${escapeHtml(data.current_sha256)}" style="position: absolute; top: 6px; right: 6px; padding: 2px 8px; font-size: 0.7rem; background: var(--bg-surface-elevated); border: 1px solid var(--border-default); border-radius: 4px; cursor: pointer;">
                                 <i class="fa-regular fa-copy"></i>
                             </button>
                         </code>
@@ -1637,6 +1649,21 @@ function initForms() {
                     ${data.reference_hash ? `<div style="margin-bottom: 8px;"><strong>Reference SHA-256:</strong> <code style="font-size: 0.82rem; word-break: break-all; color: var(--text-secondary);">${escapeHtml(data.reference_hash)}</code></div>` : ''}
                     ${statusHtml}
                 `;
+
+                if (!box._hasCopyListener) {
+                    box._hasCopyListener = true;
+                    box.addEventListener("click", (e) => {
+                        const copyBtn = e.target.closest(".copy-hash-btn");
+                        if (copyBtn) {
+                            const hash = copyBtn.getAttribute("data-hash");
+                            if (hash) {
+                                navigator.clipboard.writeText(hash)
+                                    .then(() => showNotification("SHA-256 hash copied to clipboard", "success"))
+                                    .catch(() => showNotification("Failed to copy hash", "error"));
+                            }
+                        }
+                    });
+                }
             } catch (err) {
                 showNotification("Integrity verification failed.", "error");
             }
@@ -1950,10 +1977,21 @@ async function loadDevices() {
                     <td><span class="badge ${statusClass}">${escapeHtml(dev.status)}</span></td>
                     <td>${escapeHtml(dev.observation_source || "Unknown")}</td>
                     <td>${escapeHtml(dev.last_seen || "N/A")}</td>
-                    <td><button class="btn btn-sm btn-outline-danger" onclick="deleteDevice('${encodeURIComponent(dev.id)}')" title="Remove Device"><i class="fa-solid fa-trash"></i></button></td>
+                    <td><button type="button" class="btn btn-sm btn-outline-danger delete-device-btn" data-device-id="${escapeHtml(dev.id)}" title="Remove Device"><i class="fa-solid fa-trash"></i></button></td>
                 </tr>
             `;
         }).join("");
+
+        if (!tbody._hasDeleteListener) {
+            tbody._hasDeleteListener = true;
+            tbody.addEventListener("click", (e) => {
+                const btn = e.target.closest(".delete-device-btn");
+                if (btn) {
+                    const id = btn.getAttribute("data-device-id");
+                    if (id) deleteDevice(id);
+                }
+            });
+        }
     } catch (err) {
         console.error("Failed to load devices", err);
         showNotification(err.message, "error");
@@ -2077,11 +2115,23 @@ function initGlobalSearch() {
         switchView(viewId);
     };
 
+    dropdown.addEventListener("click", (e) => {
+        const item = e.target.closest(".search-result-item");
+        if (item) {
+            const vId = item.getAttribute("data-view-id");
+            if (vId) {
+                hideDropdown();
+                searchInput.value = "";
+                switchView(vId);
+            }
+        }
+    });
+
     function renderSection(title, items, viewId, titleFn, subtitleFn) {
         if (!items || items.length === 0) return "";
         const header = `<div class="search-category-header">${escapeHtml(title)} (${items.length})</div>`;
         const rows = items.map(item => `
-            <div class="search-result-item" onclick="openSearchResult('${viewId}')">
+            <div class="search-result-item" data-view-id="${escapeHtml(viewId)}">
                 <div class="search-title">${escapeHtml(titleFn(item))}</div>
                 <div class="search-subtitle">${escapeHtml(subtitleFn(item))}</div>
             </div>

@@ -1,6 +1,7 @@
 """Aggregates raw packet metadata into network flow records over timed windows."""
 
 import logging
+import threading
 from collections import defaultdict
 from typing import Dict, List
 
@@ -18,7 +19,7 @@ class EventProcessor:
             "first_seen": None,
             "last_seen": None
         })
-        self._lock = False
+        self._lock = threading.Lock()
 
     def add_packet(self, meta: dict) -> None:
         key = (
@@ -31,17 +32,22 @@ class EventProcessor:
         ts = meta.get("timestamp")
         length = meta.get("length", 0)
 
-        flow = self._flows[key]
-        flow["packet_count"] += 1
-        flow["byte_count"] += length
-        if not flow["first_seen"]:
-            flow["first_seen"] = ts
-        flow["last_seen"] = ts
+        with self._lock:
+            flow = self._flows[key]
+            flow["packet_count"] += 1
+            flow["byte_count"] += length
+            if not flow["first_seen"]:
+                flow["first_seen"] = ts
+            flow["last_seen"] = ts
 
     def flush_flows(self) -> List[dict]:
         """Extract and clear accumulated flows into a batch of summary records."""
+        with self._lock:
+            current_items = list(self._flows.items())
+            self._flows.clear()
+
         batch = []
-        for key, stats in self._flows.items():
+        for key, stats in current_items:
             src_ip, dst_ip, src_port, dst_port, protocol = key
             batch.append({
                 "timestamp": stats["last_seen"],
@@ -55,5 +61,4 @@ class EventProcessor:
                 "first_seen": stats["first_seen"],
                 "last_seen": stats["last_seen"]
             })
-        self._flows.clear()
         return batch

@@ -5,6 +5,7 @@ Network Intelligence. Threat Detection. Digital Forensics.
 
 import asyncio
 import base64
+import hmac
 import io
 import json
 import logging
@@ -22,6 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
+from starlette.background import BackgroundTask
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -60,6 +62,7 @@ _CHUNK = 64 * 1024  # 64 KB read chunks
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _init_simulation_table()
     yield
 
 limiter = Limiter(key_func=get_remote_address)
@@ -84,12 +87,6 @@ async def _read_limited(file: UploadFile) -> bytes:
             )
         buf.write(chunk)
     return buf.getvalue()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    yield
 
 cors_env = os.environ.get("CORS_ORIGINS", "").strip()
 cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()]
@@ -586,7 +583,8 @@ async def api_embed_secret(
         raise HTTPException(status_code=400, detail="Secret too large. Maximum 5000 bytes.")
     safe_name = _sanitize_filename(file.filename)
     file_bytes = await _read_limited(file)
-    file_path = (UPLOAD_DIR / safe_name).resolve()
+    unique_id = uuid.uuid4().hex[:12]
+    file_path = (UPLOAD_DIR / f"upload_{unique_id}_{safe_name}").resolve()
     if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
         raise HTTPException(status_code=400, detail="Invalid filename")
 
@@ -622,6 +620,17 @@ async def api_embed_secret(
             file_path.unlink(missing_ok=True)
         except Exception:
             pass
+        # Sweep temporary stego files older than 10 minutes to prevent disk exhaustion
+        try:
+            now_ts = time.time()
+            for old_file in UPLOAD_DIR.glob("encoded_*.png"):
+                if now_ts - old_file.stat().st_mtime > 600:
+                    old_file.unlink(missing_ok=True)
+            for old_tmp in UPLOAD_DIR.glob("upload_*.tmp"):
+                if now_ts - old_tmp.stat().st_mtime > 600:
+                    old_tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 @app.get("/api/stego/download/{filename}")
@@ -630,7 +639,12 @@ async def api_download_stego(filename: str):
     file_path = (UPLOAD_DIR / safe_name).resolve()
     if not str(file_path).startswith(str(UPLOAD_DIR.resolve())) or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type="image/png", filename=safe_name)
+    return FileResponse(
+        file_path,
+        media_type="image/png",
+        filename=safe_name,
+        background=BackgroundTask(lambda: file_path.unlink(missing_ok=True))
+    )
 
 
 @app.post("/api/stego/extract")
@@ -669,7 +683,7 @@ async def api_forensics_analyze(file: UploadFile = File(...)):
 COLLECTOR_API_KEY = os.environ.get("NET_SENTINEL_API_KEY", "ns-live-collector-secure-key-2026")
 
 def verify_collector_key(x_collector_key: Optional[str] = Header(None)):
-    if not x_collector_key or x_collector_key != COLLECTOR_API_KEY:
+    if not x_collector_key or not hmac.compare_digest(x_collector_key, COLLECTOR_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing collector API key")
     return x_collector_key
 
@@ -749,6 +763,16 @@ async def api_collector_status():
         cursor.execute("SELECT * FROM collector_status WHERE id = 1")
         row = cursor.fetchone()
         status_data = dict(row) if row else {"status": "DISCONNECTED", "interface": "None", "packets_observed": 0, "bytes_observed": 0}
+
+        # Dynamic heartbeat evaluation: if last heartbeat is older than 15s, mark as DISCONNECTED
+        if row and row["last_heartbeat"]:
+            try:
+                hb_str = str(row["last_heartbeat"]).replace("T", " ").split(".")[0]
+                hb_dt = datetime.strptime(hb_str, "%Y-%m-%d %H:%M:%S")
+                if (datetime.utcnow() - hb_dt).total_seconds() > 15:
+                    status_data["status"] = "DISCONNECTED"
+            except Exception as hb_err:
+                logger.warning("Heartbeat parsing error: %s", hb_err)
 
         cursor.execute("SELECT * FROM live_flows ORDER BY id DESC LIMIT 50")
         flows = [dict(r) for r in cursor.fetchall()]
@@ -859,8 +883,12 @@ def _init_simulation_table() -> None:
 def _get_simulation() -> dict:
     conn = get_db_connection()
     try:
-        conn.execute(_SIMULATION_TABLE_DDL)
-        cursor = conn.execute("SELECT key, value FROM simulation_state")
+        try:
+            cursor = conn.execute("SELECT key, value FROM simulation_state")
+        except sqlite3.OperationalError:
+            conn.execute(_SIMULATION_TABLE_DDL)
+            conn.commit()
+            cursor = conn.execute("SELECT key, value FROM simulation_state")
         rows = {r[0]: r[1] for r in cursor.fetchall()}
     finally:
         conn.close()
@@ -1008,6 +1036,70 @@ def _build_telemetry_series(time_range: str, sim: dict) -> list:
     return series
 
 
+def _get_collector_telemetry(time_range: str, sim: dict) -> dict:
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, last_heartbeat FROM collector_status WHERE id = 1")
+        row = cursor.fetchone()
+        is_live = False
+        if row and row["status"] == "LIVE" and row["last_heartbeat"]:
+            try:
+                hb_str = str(row["last_heartbeat"]).replace("T", " ").split(".")[0]
+                hb_dt = datetime.strptime(hb_str, "%Y-%m-%d %H:%M:%S")
+                if (datetime.utcnow() - hb_dt).total_seconds() <= 15:
+                    is_live = True
+            except Exception:
+                pass
+
+        if is_live:
+            cursor.execute("SELECT COUNT(*) FROM live_flows")
+            flow_count = cursor.fetchone()[0]
+            if flow_count > 0:
+                cursor.execute(
+                    """
+                    SELECT 
+                        COALESCE(SUM(bytes) * 8 / 1000000.0, 0) as mbps,
+                        COALESCE(SUM(packets), 0) as pps
+                    FROM live_flows 
+                    WHERE received_at >= datetime('now', '-5 seconds')
+                    """
+                )
+                recent_agg = cursor.fetchone()
+                series = _build_telemetry_series(time_range, sim)
+                if series and recent_agg:
+                    real_in = round(float(recent_agg["mbps"]), 2)
+                    real_pps = int(recent_agg["pps"])
+                    if real_in > 0:
+                        series[-1]["inbound_mbps"] = real_in
+                    if real_pps > 0:
+                        series[-1]["packets_per_sec"] = real_pps
+                return {
+                    "range": time_range,
+                    "data_source": "REAL_COLLECTOR",
+                    "source": "LIVE COLLECTOR (Windows Agent)",
+                    "simulation_active": sim["active"],
+                    "active_scenario": sim["scenario"] or None,
+                    "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "series": series,
+                }
+    except Exception as exc:
+        logger.warning("Error querying collector telemetry: %s", exc)
+    finally:
+        conn.close()
+
+    series = _build_telemetry_series(time_range, sim)
+    return {
+        "range": time_range,
+        "data_source": "DEMO_SIMULATION",
+        "source": "DEMO DATA (Standalone Telemetry Simulator)",
+        "simulation_active": sim["active"],
+        "active_scenario": sim["scenario"] or None,
+        "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "series": series,
+    }
+
+
 @app.get("/api/telemetry")
 async def api_telemetry(time_range: Literal["15m", "1h", "6h", "24h"] = Query("1h", alias="range")):
     """Return time-series network telemetry data with active simulation anomalies.
@@ -1016,16 +1108,8 @@ async def api_telemetry(time_range: Literal["15m", "1h", "6h", "24h"] = Query("1
     The series is generated off the event loop thread.
     """
     sim = await asyncio.to_thread(_get_simulation)
-    series = await asyncio.to_thread(_build_telemetry_series, time_range, sim)
-
-    return {
-        "range": time_range,
-        "source": "DEMO DATA (Standalone Telemetry Simulator)",
-        "simulation_active": sim["active"],
-        "active_scenario": sim["scenario"] or None,
-        "generated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "series": series,
-    }
+    telemetry_data = await asyncio.to_thread(_get_collector_telemetry, time_range, sim)
+    return telemetry_data
 
 
 # --- Network Security Analytics API ---

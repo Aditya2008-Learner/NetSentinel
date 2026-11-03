@@ -142,6 +142,11 @@ def get_db_connection() -> sqlite3.Connection:
     is_new = not DB_PATH.exists()
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA foreign_keys = ON")
+    except sqlite3.OperationalError:
+        pass
     conn.row_factory = sqlite3.Row
     if is_new:
         init_db_conn(conn)
