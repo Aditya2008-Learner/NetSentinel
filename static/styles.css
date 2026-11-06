@@ -1631,7 +1631,7 @@ input[type="file"]::-webkit-file-upload-button:hover {
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.6);
-    z-index: 39;
+    z-index: 55;
     backdrop-filter: blur(2px);
 }
 
@@ -1657,7 +1657,7 @@ input[type="file"]::-webkit-file-upload-button:hover {
         bottom: 0;
         width: 270px;
         transition: transform var(--transition-smooth);
-        z-index: 40;
+        z-index: 60;
         box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
     }
 

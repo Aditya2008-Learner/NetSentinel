@@ -174,19 +174,27 @@ function initNavigation() {
     });
 }
 
-// View switching with fade animation
+let _switchViewTimer = null;
+let currentAnalyticsRange = "24H";
+
+// View switching with coordinated fade and spring animation
 function switchView(targetId) {
+    if (_switchViewTimer) {
+        clearTimeout(_switchViewTimer);
+        _switchViewTimer = null;
+    }
+
     const navItems = document.querySelectorAll(".nav-item");
     const viewPanels = document.querySelectorAll(".view-panel");
 
     // Fade out current views
     viewPanels.forEach(panel => {
         panel.style.opacity = "0";
-        panel.style.transition = "opacity 0.3s ease";
+        panel.style.transition = "opacity 0.2s ease";
     });
 
-    // Remove active classes after transition
-    setTimeout(() => {
+    // Switch active view panel
+    _switchViewTimer = setTimeout(() => {
         navItems.forEach(nav => nav.classList.remove("active"));
         viewPanels.forEach(panel => {
             panel.classList.remove("active");
@@ -199,23 +207,23 @@ function switchView(targetId) {
 
         if (activeNav) activeNav.classList.add("active");
         if (activePanel) {
+            activePanel.classList.add("active");
             activePanel.style.display = "block";
-            // Trigger reflow for fade-in
             void activePanel.offsetWidth;
             activePanel.style.opacity = "1";
         }
 
         // Update page title
         const titleText = activeNav ? activeNav.textContent.trim() : "Net Sentinel";
-        document.getElementById("current-page-title").textContent = titleText;
-    }, 300);
+        const titleEl = document.getElementById("current-page-title");
+        if (titleEl) titleEl.textContent = titleText;
 
-        // Special handling for overview or analytics to smoothly resume charts
+        // View-specific data loading when panel becomes active
         if (targetId === "overview-view") {
             _lastTime = performance.now();
-            setTimeout(renderTelemetryChart, 150);
+            renderTelemetryChart();
         } else if (targetId === "analytics-view") {
-            setTimeout(() => loadAnalyticsData(currentAnalyticsRange), 150);
+            loadAnalyticsData(currentAnalyticsRange);
         } else if (targetId === "devices-view") {
             loadDevices();
         } else if (targetId === "network-view") {
@@ -223,6 +231,7 @@ function switchView(targetId) {
         } else if (targetId === "live-collector-view") {
             loadLiveCollectorData();
         }
+    }, 200);
 }
 
 async function loadLiveCollectorData() {
@@ -2286,7 +2295,6 @@ async function generateReport() {
 // ==========================================================================
 // Network Security Analytics Controller (24H, 7D, 30D, 90D)
 // ==========================================================================
-let currentAnalyticsRange = "24H";
 let latestAnalyticsData = null;
 
 async function setAnalyticsRange(range) {
