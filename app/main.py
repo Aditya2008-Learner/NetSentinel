@@ -28,7 +28,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from .services import analyze_logs, summarize
+from .services import analyze_logs, summarize, evaluate_threats_for_flows
 from .database import get_db_connection, init_db
 from .stego_service import (
     calculate_sha256,
@@ -743,6 +743,12 @@ async def api_collector_events(request: Request, payload: dict, api_key: str = D
             (last_iface, total_packets, total_bytes)
         )
         conn.commit()
+
+        # Evaluate threat heuristics
+        try:
+            evaluate_threats_for_flows(conn, events)
+        except Exception as th_err:
+            logger.warning("Threat evaluation error: %s", th_err)
     except HTTPException:
         raise
     except Exception as exc:
@@ -1243,3 +1249,203 @@ async def api_analytics_export(time_range: Literal["24H", "7D", "30D", "90D"] = 
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=net_sentinel_analytics_{time_range.lower()}.csv"}
     )
+
+
+# ==========================================================================
+# Phase 3: Cyber Security Operations Center (SOC) & Threat Intelligence APIs
+# ==========================================================================
+
+@app.get("/api/soc/rules")
+async def api_get_detection_rules():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM detection_rules")
+        return [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+@app.put("/api/soc/rules/{rule_id}")
+async def api_update_detection_rule(rule_id: str, payload: dict):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM detection_rules WHERE rule_id = ?", (rule_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Rule not found")
+        enabled = int(payload.get("enabled", 1))
+        severity = payload.get("severity", "MEDIUM")
+        weight = float(payload.get("confidence_weight", 0.85))
+        cursor.execute(
+            "UPDATE detection_rules SET enabled = ?, severity = ?, confidence_weight = ? WHERE rule_id = ?",
+            (enabled, severity, weight, rule_id)
+        )
+        conn.commit()
+        return {"success": True, "rule_id": rule_id}
+    finally:
+        conn.close()
+
+@app.get("/api/soc/alerts")
+async def api_get_security_alerts(status: Optional[str] = Query(None), severity: Optional[str] = Query(None)):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        query = "SELECT * FROM security_alerts WHERE 1=1"
+        params = []
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if severity:
+            query += " AND severity = ?"
+            params.append(severity)
+        query += " ORDER BY detected_at DESC LIMIT 100"
+        cursor.execute(query, params)
+        return [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+@app.post("/api/soc/alerts/{alert_id}/triage")
+async def api_triage_security_alert(alert_id: str, payload: dict):
+    status = payload.get("status", "ACKNOWLEDGED")
+    analyst = payload.get("analyst", "SOC-Analyst-1")
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM security_alerts WHERE alert_id = ?", (alert_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Alert not found")
+        resolved_dt = datetime.utcnow().isoformat() if status in ("RESOLVED", "FALSE_POSITIVE") else None
+        cursor.execute(
+            "UPDATE security_alerts SET status = ?, assigned_analyst = ?, resolved_at = ? WHERE alert_id = ?",
+            (status, analyst, resolved_dt, alert_id)
+        )
+        conn.commit()
+        return {"success": True, "alert_id": alert_id, "status": status}
+    finally:
+        conn.close()
+
+@app.get("/api/soc/cases")
+async def api_get_incident_cases():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM incident_cases ORDER BY updated_at DESC")
+        cases = []
+        for row in cursor.fetchall():
+            c = dict(row)
+            c_id = c["case_id"]
+            c_cursor = conn.execute("SELECT * FROM incident_timeline WHERE case_id = ? ORDER BY timestamp ASC", (c_id,))
+            c["timeline"] = [dict(t) for t in c_cursor.fetchall()]
+            cases.append(c)
+        return cases
+    finally:
+        conn.close()
+
+@app.post("/api/soc/cases")
+async def api_create_incident_case(payload: dict):
+    title = payload.get("title")
+    if not title:
+        raise HTTPException(status_code=400, detail="Case title is required")
+    case_id = f"CASE-{uuid.uuid4().hex[:8]}"
+    owner = payload.get("owner", "Lead SOC Analyst")
+    summary = payload.get("summary", "")
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO incident_cases (case_id, title, status, owner, summary) VALUES (?, ?, 'INVESTIGATING', ?, ?)",
+            (case_id, title, owner, summary)
+        )
+        cursor.execute(
+            "INSERT INTO incident_timeline (case_id, actor, action, artifact_ref) VALUES (?, ?, ?, ?)",
+            (case_id, owner, f"Incident case created: {title}", case_id)
+        )
+        conn.commit()
+        return {"success": True, "case_id": case_id, "title": title}
+    finally:
+        conn.close()
+
+@app.post("/api/soc/cases/{case_id}/timeline")
+async def api_add_case_timeline_event(case_id: str, payload: dict):
+    action = payload.get("action")
+    if not action:
+        raise HTTPException(status_code=400, detail="Action description is required")
+    actor = payload.get("actor", "Analyst")
+    artifact_ref = payload.get("artifact_ref")
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT case_id FROM incident_cases WHERE case_id = ?", (case_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Case not found")
+        cursor.execute(
+            "INSERT INTO incident_timeline (case_id, actor, action, artifact_ref) VALUES (?, ?, ?, ?)",
+            (case_id, actor, action, artifact_ref)
+        )
+        cursor.execute("UPDATE incident_cases SET updated_at = CURRENT_TIMESTAMP WHERE case_id = ?", (case_id,))
+        conn.commit()
+        return {"success": True, "case_id": case_id}
+    finally:
+        conn.close()
+
+@app.get("/api/intelligence/topology")
+async def api_network_topology():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT src_ip, dst_ip, protocol, SUM(packets) as total_packets, SUM(bytes) as total_bytes FROM live_flows GROUP BY src_ip, dst_ip LIMIT 100")
+        edges = [dict(r) for r in cursor.fetchall()]
+        
+        nodes_set = set()
+        for e in edges:
+            nodes_set.add(e["src_ip"])
+            nodes_set.add(e["dst_ip"])
+        
+        nodes = [{"id": ip, "label": ip, "type": "gateway" if ip.endswith(".1") else "endpoint"} for ip in nodes_set]
+        return {"nodes": nodes, "edges": edges}
+    finally:
+        conn.close()
+
+@app.post("/api/reports/executive")
+async def api_generate_executive_report(payload: dict):
+    window = payload.get("time_window", "24H")
+    report_id = f"REP-{uuid.uuid4().hex[:8]}"
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM live_flows")
+        total_flows = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM security_alerts")
+        total_alerts = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM security_alerts WHERE severity = 'CRITICAL'")
+        crit_incidents = cursor.fetchone()[0]
+        
+        posture_score = max(0.0, min(100.0, 100.0 - (crit_incidents * 15.0) - (total_alerts * 2.0)))
+        summary = {
+            "posture_assessment": "Secure with minor heuristic anomalies detected." if posture_score > 70 else "Elevated risk profile requiring SOC intervention.",
+            "recommendations": [
+                "Enforce rate limiting on sensitive authentication ports.",
+                "Review outlier outbound flows for potential data exfiltration.",
+                "Verify file integrity baselines across mission-critical endpoints."
+            ]
+        }
+        cursor.execute(
+            """
+            INSERT INTO executive_reports (report_id, time_window, total_flows, total_alerts, critical_incidents, posture_score, summary_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (report_id, window, total_flows, total_alerts, crit_incidents, posture_score, json.dumps(summary))
+        )
+        conn.commit()
+        return {
+            "success": True,
+            "report_id": report_id,
+            "time_window": window,
+            "total_flows": total_flows,
+            "total_alerts": total_alerts,
+            "critical_incidents": crit_incidents,
+            "posture_score": posture_score,
+            "summary": summary
+        }
+    finally:
+        conn.close()

@@ -49,6 +49,12 @@
                 <a href="#" class="nav-item" data-target="devices-view">
                     <i class="fa-solid fa-laptop-code"></i> Device Inventory
                 </a>
+                <a href="#" class="nav-item" data-target="soc-alerts-view">
+                    <i class="fa-solid fa-shield-cat"></i> SOC Alert Triage
+                </a>
+                <a href="#" class="nav-item" data-target="topology-view">
+                    <i class="fa-solid fa-project-diagram"></i> Network Intelligence
+                </a>
                 <a href="#" class="nav-item" data-target="investigations-view">
                     <i class="fa-solid fa-folder-open"></i> Investigations
                 </a>
@@ -767,6 +773,51 @@
                                 </button>
                             </div>
                             <pre id="report-json-output"></pre>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 9. SOC ALERT TRIAGE VIEW -->
+                <section id="soc-alerts-view" class="view-panel" style="display: none;">
+                    <div class="section-header">
+                        <h2>SOC Security Alert Triage</h2>
+                        <p>Centralized alert queue, heuristic confidence scoring, and incident acknowledgment.</p>
+                        <div class="header-actions">
+                            <button class="btn btn-primary" id="refresh-soc-alerts-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh Queue</button>
+                        </div>
+                    </div>
+                    <div class="table-container bg-[#151f34] border border-[#26354f] rounded-xl p-5 shadow-lg">
+                        <table id="soc-alerts-table" class="w-full text-left border-collapse">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-default); color: var(--text-secondary); font-size: 0.8rem;">
+                                    <th style="padding: 10px;">Alert ID</th>
+                                    <th style="padding: 10px;">Rule / Title</th>
+                                    <th style="padding: 10px;">Severity</th>
+                                    <th style="padding: 10px;">Confidence</th>
+                                    <th style="padding: 10px;">Source IP</th>
+                                    <th style="padding: 10px;">Status</th>
+                                    <th style="padding: 10px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="soc-alerts-tbody">
+                                <tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">Loading security alerts...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 10. NETWORK INTELLIGENCE TOPOLOGY VIEW -->
+                <section id="topology-view" class="view-panel" style="display: none;">
+                    <div class="section-header">
+                        <h2>Network Intelligence & Topology</h2>
+                        <p>Visual mapping of discovered subnets, gateways, and cross-node traffic relationships.</p>
+                        <div class="header-actions">
+                            <button class="btn btn-primary" id="refresh-topology-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh Topology</button>
+                        </div>
+                    </div>
+                    <div class="bg-[#151f34] border border-[#26354f] rounded-xl p-6 shadow-lg">
+                        <div id="topology-container" style="width: 100%; height: 400px; background: var(--bg-surface-inset); border-radius: 8px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
+                            <canvas id="topology-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
                         </div>
                     </div>
                 </section>

@@ -230,6 +230,10 @@ function switchView(targetId) {
             loadAnalysisHistory();
         } else if (targetId === "live-collector-view") {
             loadLiveCollectorData();
+        } else if (targetId === "soc-alerts-view") {
+            loadSocAlerts();
+        } else if (targetId === "topology-view") {
+            loadNetworkTopology();
         }
     }, 200);
 }
@@ -2548,3 +2552,132 @@ window.closeDeviceModal = closeDeviceModal;
 window.handleCreateDevice = handleCreateDevice;
 window.generateReport = generateReport;
 window.toggleReportPreview = toggleReportPreview;
+window.loadSocAlerts = loadSocAlerts;
+window.loadNetworkTopology = loadNetworkTopology;
+
+async function loadSocAlerts() {
+    const tbody = document.getElementById("soc-alerts-tbody");
+    if (!tbody) return;
+    try {
+        const res = await fetch("/api/soc/alerts");
+        if (!res.ok) throw new Error("Failed to load security alerts");
+        const alerts = await res.json();
+        if (!alerts || alerts.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 20px;">No security alerts detected.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = alerts.map((a, idx) => {
+            const sev = (a.severity || "MEDIUM").toUpperCase();
+            const badgeClass = sev === "CRITICAL" || sev === "HIGH" ? "badge-danger" : sev === "MEDIUM" ? "badge-warning" : "badge-success";
+            return `
+                <tr class="timeline-row-anim" style="animation-delay: ${idx * 25}ms;">
+                    <td><code>${escapeHtml(a.alert_id)}</code></td>
+                    <td><strong>${escapeHtml(a.title)}</strong></td>
+                    <td><span class="badge ${badgeClass}">${sev}</span></td>
+                    <td><code>${Math.round((a.confidence || 0.85) * 100)}%</code></td>
+                    <td><code>${escapeHtml(a.source_ip || "N/A")}</code></td>
+                    <td><span class="badge badge-info">${escapeHtml(a.status)}</span></td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-secondary triage-btn" data-alert-id="${escapeHtml(a.alert_id)}" data-status="ACKNOWLEDGED">Acknowledge</button>
+                        <button type="button" class="btn btn-sm btn-primary triage-btn" data-alert-id="${escapeHtml(a.alert_id)}" data-status="RESOLVED">Resolve</button>
+                    </td>
+                </tr>
+            `;
+        }).join("");
+
+        if (!tbody._hasTriageListener) {
+            tbody._hasTriageListener = true;
+            tbody.addEventListener("click", async (e) => {
+                const btn = e.target.closest(".triage-btn");
+                if (btn) {
+                    const alertId = btn.getAttribute("data-alert-id");
+                    const status = btn.getAttribute("data-status");
+                    await triageSocAlert(alertId, status);
+                }
+            });
+        }
+    } catch (err) {
+        console.error(err);
+        showNotification("Failed to load SOC alerts", "error");
+    }
+}
+
+async function triageSocAlert(alertId, status) {
+    try {
+        const res = await fetch(`/api/soc/alerts/${encodeURIComponent(alertId)}/triage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: status, analyst: "Lead-SOC-Analyst" })
+        });
+        if (!res.ok) throw new Error("Triage update failed");
+        showNotification(`Alert ${alertId} marked as ${status}`, "success");
+        loadSocAlerts();
+    } catch (err) {
+        showNotification("Failed to update alert status", "error");
+    }
+}
+
+async function loadNetworkTopology() {
+    const canvas = document.getElementById("topology-canvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    try {
+        const res = await fetch("/api/intelligence/topology");
+        if (!res.ok) throw new Error("Failed to load network topology");
+        const data = await res.json();
+        const nodes = data.nodes || [];
+        const edges = data.edges || [];
+
+        const width = canvas.parentElement.clientWidth || 600;
+        const height = 400;
+        canvas.width = width;
+        canvas.height = height;
+
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw grid
+        ctx.strokeStyle = "rgba(38, 53, 79, 0.3)";
+        ctx.lineWidth = 1;
+        for (let x = 0; x < width; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+        }
+        for (let y = 0; y < height; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+        }
+
+        const nodePositions = {};
+        nodes.forEach((node, idx) => {
+            const angle = (idx / Math.max(nodes.length, 1)) * Math.PI * 2;
+            const radius = Math.min(width, height) * 0.32;
+            const x = width / 2 + Math.cos(angle) * radius;
+            const y = height / 2 + Math.sin(angle) * radius;
+            nodePositions[node.id] = { x, y, label: node.label };
+        });
+
+        edges.forEach(e => {
+            const p1 = nodePositions[e.src_ip];
+            const p2 = nodePositions[e.dst_ip];
+            if (p1 && p2) {
+                ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+        });
+
+        Object.values(nodePositions).forEach(pos => {
+            ctx.fillStyle = "#10b981";
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#f8fafc";
+            ctx.font = "11px 'JetBrains Mono', monospace";
+            ctx.fillText(pos.label, pos.x + 10, pos.y + 4);
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}

@@ -17,11 +17,13 @@ Rule definitions and thresholds are configurable.
 """
 
 import csv
+import json
+import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
 
-__all__ = ["analyze_logs", "summarize", "SRC_THRESHOLD", "DST_THRESHOLD", "RULE_DEFINITIONS", "EventList"]
+__all__ = ["analyze_logs", "summarize", "evaluate_threats_for_flows", "SRC_THRESHOLD", "DST_THRESHOLD", "RULE_DEFINITIONS", "EventList"]
 
 class EventList(list):
     total_rows: int = 0
@@ -460,3 +462,69 @@ def summarize(events: List[Dict[str, str]], total_rows: Optional[int] = None) ->
         "unique_sources": len(sources),
         "unique_destinations": len(destinations),
     }
+
+
+def evaluate_threats_for_flows(conn, flows: List[Dict]) -> List[Dict]:
+    """Evaluate live telemetry flows against detection rules and persist security alerts."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT rule_id, severity, confidence_weight, enabled FROM detection_rules WHERE enabled = 1")
+    rules = {r["rule_id"]: r for r in cursor.fetchall()}
+
+    new_alerts = []
+    source_ports = defaultdict(set)
+    auth_attempts = defaultdict(int)
+
+    for f in flows:
+        src = f.get("src_ip")
+        dst = f.get("dst_ip")
+        dport = f.get("dst_port")
+        bytes_count = f.get("bytes", 0)
+
+        if src and dport:
+            try:
+                source_ports[src].add(int(dport))
+            except (ValueError, TypeError):
+                pass
+        if src and dport in SENSITIVE_PORTS:
+            auth_attempts[src] += 1
+
+    # Check port scan rule (RULE-PORT-SCAN)
+    if "RULE-PORT-SCAN" in rules and rules["RULE-PORT-SCAN"]["enabled"]:
+        r_info = rules["RULE-PORT-SCAN"]
+        for src, ports in source_ports.items():
+            if len(ports) >= 8:
+                alert_id = f"ALT-{uuid.uuid4().hex[:8]}"
+                title = f"Port Scanning Indicator from {src}"
+                details = json.dumps({"source_ip": src, "distinct_ports_scanned": len(ports), "ports": list(ports)[:20]})
+                cursor.execute("SELECT alert_id FROM security_alerts WHERE rule_id = 'RULE-PORT-SCAN' AND source_ip = ? AND status = 'OPEN'", (src,))
+                if not cursor.fetchone():
+                    cursor.execute(
+                        """
+                        INSERT INTO security_alerts (alert_id, rule_id, title, severity, confidence, source_ip, details, status)
+                        VALUES (?, 'RULE-PORT-SCAN', ?, ?, ?, ?, ?, 'OPEN')
+                        """,
+                        (alert_id, title, r_info["severity"], r_info["confidence_weight"], src, details)
+                    )
+                    new_alerts.append({"alert_id": alert_id, "title": title, "severity": r_info["severity"]})
+
+    # Check brute force rule (RULE-BRUTE-FORCE)
+    if "RULE-BRUTE-FORCE" in rules and rules["RULE-BRUTE-FORCE"]["enabled"]:
+        r_info = rules["RULE-BRUTE-FORCE"]
+        for src, count in auth_attempts.items():
+            if count >= BRUTE_FORCE_THRESHOLD:
+                alert_id = f"ALT-{uuid.uuid4().hex[:8]}"
+                title = f"Unusual Authentication Frequency / Brute Force from {src}"
+                details = json.dumps({"source_ip": src, "attempts": count, "sensitive_ports": list(SENSITIVE_PORTS)})
+                cursor.execute("SELECT alert_id FROM security_alerts WHERE rule_id = 'RULE-BRUTE-FORCE' AND source_ip = ? AND status = 'OPEN'", (src,))
+                if not cursor.fetchone():
+                    cursor.execute(
+                        """
+                        INSERT INTO security_alerts (alert_id, rule_id, title, severity, confidence, source_ip, details, status)
+                        VALUES (?, 'RULE-BRUTE-FORCE', ?, ?, ?, ?, ?, 'OPEN')
+                        """,
+                        (alert_id, title, r_info["severity"], r_info["confidence_weight"], src, details)
+                    )
+                    new_alerts.append({"alert_id": alert_id, "title": title, "severity": r_info["severity"]})
+
+    conn.commit()
+    return new_alerts

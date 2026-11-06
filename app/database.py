@@ -134,12 +134,103 @@ def init_db_conn(conn: sqlite3.Connection) -> None:
             ("DEV-002", "192.168.1.50", "f6:e5:d4:c3:b2:a1", "Analysis Node", "Active", "Local Interface"),
         )
 
+    # Phase 3 SOC & Threat Detection Schema
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS detection_rules (
+            rule_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            confidence_weight REAL DEFAULT 0.85,
+            enabled INTEGER DEFAULT 1,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS security_alerts (
+            alert_id TEXT PRIMARY KEY,
+            rule_id TEXT REFERENCES detection_rules(rule_id),
+            title TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            source_ip TEXT,
+            dest_ip TEXT,
+            details TEXT,
+            status TEXT DEFAULT 'OPEN',
+            assigned_analyst TEXT,
+            detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS incident_cases (
+            case_id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            status TEXT DEFAULT 'INVESTIGATING',
+            owner TEXT,
+            summary TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS incident_timeline (
+            event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id TEXT REFERENCES incident_cases(case_id) ON DELETE CASCADE,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            actor TEXT,
+            action TEXT NOT NULL,
+            artifact_ref TEXT
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS executive_reports (
+            report_id TEXT PRIMARY KEY,
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            time_window TEXT NOT NULL,
+            total_flows INTEGER,
+            total_alerts INTEGER,
+            critical_incidents INTEGER,
+            posture_score REAL,
+            summary_json TEXT
+        )
+        """
+    )
+
+    # Seed default detection rules
+    default_rules = [
+        ("RULE-PORT-SCAN", "Rapid SYN / Port Scan Indicator", "PORT_SCAN", "HIGH", 0.90, "Detects high volume of distinct destination ports probed from a single source IP."),
+        ("RULE-BRUTE-FORCE", "Unusual Connection Frequency / Brute Force", "BRUTE_FORCE", "CRITICAL", 0.95, "Detects high frequency of repeated connection attempts to sensitive authentication ports."),
+        ("RULE-HIGH-BANDWIDTH", "Abnormal Volume Data Transfer", "ANOMALY", "MEDIUM", 0.80, "Detects flows transferring abnormal byte volumes exceeding baseline heuristics."),
+    ]
+    for r_id, r_name, r_cat, r_sev, r_conf, r_desc in default_rules:
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO detection_rules (rule_id, name, category, severity, confidence_weight, enabled, description)
+            VALUES (?, ?, ?, ?, ?, 1, ?)
+            """,
+            (r_id, r_name, r_cat, r_sev, r_conf, r_desc)
+        )
+
     conn.commit()
 
 
 def get_db_connection() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    is_new = not DB_PATH.exists()
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA busy_timeout = 5000")
     try:
@@ -148,8 +239,7 @@ def get_db_connection() -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass
     conn.row_factory = sqlite3.Row
-    if is_new:
-        init_db_conn(conn)
+    init_db_conn(conn)
     return conn
 
 
