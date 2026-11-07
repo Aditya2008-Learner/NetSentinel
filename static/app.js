@@ -339,7 +339,7 @@ function renderLiveProtocolDonut(protocols) {
     const totalFlows = protocols.reduce((acc, p) => acc + (p.count || 0), 0);
     if (totalEl) _animateNumberCounter(totalEl, totalFlows);
 
-    const colors = ["#B8F36B", "#38bdf8", "#f59e0b", "#FF6B57", "#8b5cf6"];
+    const colors = ["#06B6D4", "#38bdf8", "#f59e0b", "#FF6B57", "#8b5cf6"];
     const radius = 38;
     const circumference = 2 * Math.PI * radius; // ~238.76
 
@@ -615,8 +615,8 @@ function renderTelemetryChart() {
     const shift = telemetryPaused ? 0 : _scrollOffset * stepX;
 
     const inGrad = ctx.createLinearGradient(0, 0, 0, height);
-    inGrad.addColorStop(0, "rgba(184, 243, 107, 0.22)");
-    inGrad.addColorStop(1, "rgba(184, 243, 107, 0.0)");
+    inGrad.addColorStop(0, "rgba(6, 182, 212, 0.22)");
+    inGrad.addColorStop(1, "rgba(6, 182, 212, 0.0)");
     ctx.fillStyle = inGrad;
     ctx.beginPath();
     ctx.moveTo(0, height);
@@ -625,7 +625,7 @@ function renderTelemetryChart() {
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = "#B8F36B";
+    ctx.strokeStyle = "#06B6D4";
     ctx.lineWidth = 2.2;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -634,8 +634,8 @@ function renderTelemetryChart() {
     ctx.stroke();
 
     const outGrad = ctx.createLinearGradient(0, 0, 0, height);
-    outGrad.addColorStop(0, "rgba(56, 189, 248, 0.16)");
-    outGrad.addColorStop(1, "rgba(56, 189, 248, 0.0)");
+    outGrad.addColorStop(0, "rgba(16, 185, 129, 0.18)");
+    outGrad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
     ctx.fillStyle = outGrad;
     ctx.beginPath();
     ctx.moveTo(0, height);
@@ -644,7 +644,7 @@ function renderTelemetryChart() {
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = "#38bdf8";
+    ctx.strokeStyle = "#10B981";
     ctx.lineWidth = 1.8;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -661,30 +661,30 @@ function renderTelemetryChart() {
         const pulseScale = telemetryPaused ? 1 : (1 + Math.sin(_phase * 4.5) * 0.28);
         const pulseAlpha = telemetryPaused ? 0.35 : (0.35 + Math.sin(_phase * 4.5) * 0.15);
 
-        ctx.fillStyle = `rgba(184, 243, 107, ${pulseAlpha * 0.45})`;
+        ctx.fillStyle = `rgba(6, 182, 212, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
         ctx.arc(lastX, lastInY, 10 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(184, 243, 107, ${pulseAlpha})`;
+        ctx.fillStyle = `rgba(6, 182, 212, ${pulseAlpha})`;
         ctx.beginPath();
         ctx.arc(lastX, lastInY, 6 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#B8F36B";
+        ctx.fillStyle = "#06B6D4";
         ctx.beginPath();
         ctx.arc(lastX, lastInY, 3.5, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(56, 189, 248, ${pulseAlpha * 0.45})`;
+        ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
         ctx.arc(lastX, lastOutY, 8.5 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(56, 189, 248, ${pulseAlpha})`;
+        ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha})`;
         ctx.beginPath();
         ctx.arc(lastX, lastOutY, 5 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#38bdf8";
+        ctx.fillStyle = "#10B981";
         ctx.beginPath();
         ctx.arc(lastX, lastOutY, 3.0, 0, Math.PI * 2);
         ctx.fill();
@@ -1069,8 +1069,8 @@ async function loadNetworkResults(data) {
                 <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Medium</span>
             </div>
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
-                <span style="font-size: 0.75rem; font-weight: 700; color: #B8F36B; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) 200ms both;">${lowSev}</span>
-                <div class="mini-bar-anim" style="width: 100%; height: ${lowH}%; background: linear-gradient(180deg, #B8F36B 0%, rgba(184, 243, 107, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) 200ms both;"></div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: #06B6D4; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) 200ms both;">${lowSev}</span>
+                <div class="mini-bar-anim" style="width: 100%; height: ${lowH}%; background: linear-gradient(180deg, #06B6D4 0%, rgba(6, 182, 212, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) 200ms both;"></div>
                 <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Low</span>
             </div>
         `;
@@ -2405,7 +2405,7 @@ function renderAnalyticsUI(data) {
         m_tp_pill.innerHTML = `<i class="fa-solid fa-arrow-trend-${m.throughput.change_pct >= 0 ? 'up' : 'down'} text-[9px]"></i> ${sign}${m.throughput.change_pct}%`;
         m_tp_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.throughput.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
     }
-    renderMiniBars("m-tp-chart", m.throughput.bars, m.throughput.favorable ? "#B8F36B" : "#FF6B57");
+    renderMiniBars("m-tp-chart", m.throughput.bars, m.throughput.favorable ? "#06B6D4" : "#FF6B57");
 
     // 3. Metric 2: Threat Events
     const m_threat_val = document.getElementById("m-threat-val");
@@ -2438,7 +2438,7 @@ function renderAnalyticsUI(data) {
         m_lat_pill.innerHTML = `<i class="fa-solid fa-arrow-${m.latency.change_diff <= 0 ? 'down' : 'up'} text-[9px]"></i> ${sign}${m.latency.change_diff} ms`;
         m_lat_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.latency.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
     }
-    renderMiniBars("m-lat-chart", m.latency.bars, m.latency.favorable ? "#B8F36B" : "#f59e0b");
+    renderMiniBars("m-lat-chart", m.latency.bars, m.latency.favorable ? "#06B6D4" : "#f59e0b");
 
     // 6. Main Telemetry SVG Area Chart
     renderAnalyticsSvgChart(data.chart_series);
@@ -2516,8 +2516,8 @@ function renderAnalyticsSvgChart(series) {
     svg.innerHTML = `
         <defs>
             <linearGradient id="inboundGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#B8F36B" stop-opacity="0.25"/>
-                <stop offset="100%" stop-color="#B8F36B" stop-opacity="0.0"/>
+                <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#06B6D4" stop-opacity="0.0"/>
             </linearGradient>
             <linearGradient id="outboundGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.18"/>
@@ -2532,14 +2532,14 @@ function renderAnalyticsSvgChart(series) {
 
         <!-- Inbound Area & Smooth Waveform with Motion Drawing Animations -->
         <path d="${inArea}" fill="url(#inboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) forwards;" />
-        <path d="${inPath}" fill="none" stroke="#B8F36B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) forwards;" />
+        <path d="${inPath}" fill="none" stroke="#06B6D4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) forwards;" />
 
         <!-- Outbound Area & Smooth Waveform with Staggered Motion Drawing Animations -->
         <path d="${outArea}" fill="url(#outboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) 0.08s forwards;" />
         <path d="${outPath}" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) 0.08s forwards;" />
 
         <!-- Interactive Data Dots with Staggered Spring Pop -->
-        ${inPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3.5" fill="#B8F36B" stroke="#090e1c" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22}ms both;"><title>Inbound: ${p.pt.inbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
+        ${inPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3.5" fill="#06B6D4" stroke="#090e1c" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22}ms both;"><title>Inbound: ${p.pt.inbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
         ${outPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3" fill="#38bdf8" stroke="#090e1c" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22 + 80}ms both;"><title>Outbound: ${p.pt.outbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
     `;
 
@@ -2725,7 +2725,7 @@ async function loadNetworkTopology() {
         });
 
         Object.values(nodePositions).forEach(pos => {
-            ctx.fillStyle = "#B8F36B";
+            ctx.fillStyle = "#06B6D4";
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
             ctx.fill();

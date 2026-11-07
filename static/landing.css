@@ -4,31 +4,35 @@
  */
 
 :root {
-    --obsidian: #0B0E10;
-    --graphite: #151B1D;
-    --graphite-light: #1D2427;
-    --graphite-surface: #182023;
-    --signal-lime: #B8F36B;
-    --signal-lime-dim: rgba(184, 243, 107, 0.12);
-    --signal-lime-border: rgba(184, 243, 107, 0.35);
-    --evidence-white: #E8EAE3;
-    --muted-grey: #A4AAA9;
-    --border-grey: #343A3B;
-    --border-subtle: rgba(52, 58, 59, 0.6);
-    --threat-coral: #FF6B57;
-    --threat-coral-dim: rgba(255, 107, 87, 0.15);
-    --warning-amber: #E8B65A;
-    --warning-amber-dim: rgba(232, 182, 90, 0.15);
+    /* Color Palette (Dark Mode First / Void Foundations) */
+    --obsidian: #0A0A0C;          /* Background Canvas */
+    --graphite: #121316;          /* Container / Card Surface */
+    --graphite-light: #1A1C23;    /* Active / Hover State */
+    --graphite-surface: #121316;
+    --signal-lime: #06B6D4;       /* Intelligence Cyan (Primary Accent) */
+    --signal-lime-dim: rgba(6, 182, 212, 0.12);
+    --signal-lime-border: rgba(6, 182, 212, 0.25);
+    --intel-cyan: #06B6D4;
+    --signal-green: #10B981;      /* Signal Green */
+    --evidence-white: #F8FAFC;    /* Primary Text (Alabaster) */
+    --muted-grey: #94A3B8;        /* Secondary Text (Muted Slate) */
+    --border-grey: rgba(255, 255, 255, 0.10); /* 1px fine borders */
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --threat-coral: #EF4444;      /* Critical Red */
+    --threat-coral-dim: rgba(239, 68, 68, 0.15);
+    --warning-amber: #F59E0B;     /* Alert Amber */
+    --warning-amber-dim: rgba(245, 158, 11, 0.15);
 
     --font-headline: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
+    /* Micro radii / Crisp 90-degree corners */
+    --radius-sm: 2px;
+    --radius-md: 2px;
+    --radius-lg: 2px;
 
-    --header-h: 72px;
+    --header-h: 70px;
     --max-w: 1200px;
 }
 

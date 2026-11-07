@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
@@ -26,7 +26,7 @@
         <!-- Sidebar Navigation -->
         <aside class="sidebar" id="sidebar">
             <a href="/" class="brand-area" style="text-decoration: none; display: flex; align-items: center; gap: 12px; color: inherit;" title="Return to Net Sentinel Landing Page">
-                <span class="brand-symbol" style="width: 14px; height: 14px; background-color: var(--signal-lime); border-radius: 2px; box-shadow: 0 0 10px rgba(184, 243, 107, 0.4); display: inline-block;"></span>
+                <span class="brand-symbol" style="width: 14px; height: 14px; background-color: var(--intel-cyan); border-radius: 2px; box-shadow: 0 0 10px rgba(6, 182, 212, 0.4); display: inline-block;"></span>
                 <div class="brand-text">
                     <h2>NET SENTINEL</h2>
                     <span>SIGNAL / EVIDENCE</span>
@@ -194,8 +194,8 @@
                     <div class="card telemetry-panel">
                         <div class="telemetry-header">
                             <div>
-                                <h2><i class="fa-solid fa-chart-line" style="color: var(--accent-emerald);"></i> Network Telemetry</h2>
-                                <p>Real-time throughput, packet rate, and latency observations (DEMO DATA).</p>
+                                <h2><i class="fa-solid fa-chart-line" style="color: var(--intel-cyan);"></i> Network Telemetry <span style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--intel-cyan); background: var(--intel-cyan-dim); border: 1px solid var(--intel-cyan-border); padding: 2px 6px; margin-left: 8px;">TELEMETRY_ENGINE / 001</span></h2>
+                                <p>TELEMETRY_THROUGHPUT_STREAM (Mbps) &bull; &bull; 60 FPS &bull; Real-time throughput, packet rate, and latency observations.</p>
                             </div>
                             <div class="telemetry-controls-group">
                                 <select id="telemetry-range" class="telemetry-select">
@@ -245,10 +245,10 @@
                             <!-- Canvas for telemetry chart -->
                             <div style="display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-bottom: 6px; font-size: 0.75rem;">
                                 <span style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary);">
-                                    <span style="width: 10px; height: 3px; background-color: #10b981; border-radius: 2px;"></span> Inbound
+                                    <span style="width: 10px; height: 3px; background-color: #06B6D4; border-radius: 2px;"></span> Inbound
                                 </span>
                                 <span style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary);">
-                                    <span style="width: 10px; height: 3px; background-color: #38bdf8; border-radius: 2px;"></span> Outbound
+                                    <span style="width: 10px; height: 3px; background-color: #10B981; border-radius: 2px;"></span> Outbound
                                 </span>
                             </div>
                             <canvas id="telemetry-canvas" style="width: 100%; height: 180px; display: block;"></canvas>
@@ -396,6 +396,7 @@
                 <!-- 2. NETWORK SECURITY VIEW -->
                 <section id="network-view" class="view-panel">
                     <div class="section-header">
+                        <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_NETWORK_MONITOR / 001</span>
                         <h2>Network Security & Log Analysis</h2>
                         <p>Upload network connection log CSV files or run heuristic threat detection rules (Port Scans, Connection Bursts, Brute Force).</p>
                     </div>
@@ -690,6 +691,7 @@
                 <!-- 6. IMAGE FORENSICS VIEW -->
                 <section id="forensics-view" class="view-panel">
                     <div class="section-header">
+                        <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_DIGITAL_FORENSICS / 003</span>
                         <h2>Image Forensics & Heuristics</h2>
                         <p>Analyze image metadata, file hashes, and statistical LSB noise distribution.</p>
                     </div>
@@ -723,6 +725,7 @@
                 <!-- 7. INTEGRITY VERIFICATION VIEW -->
                 <section id="integrity-view" class="view-panel">
                     <div class="section-header">
+                        <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_FILE_INTEGRITY / 004</span>
                         <h2>File Integrity Verification (SHA-256)</h2>
                         <p>Calculate cryptographic file hashes and compare them against trusted baselines.</p>
                     </div>
@@ -781,6 +784,7 @@
                 <!-- 9. SOC ALERT TRIAGE VIEW -->
                 <section id="soc-alerts-view" class="view-panel" style="display: none;">
                     <div class="section-header">
+                        <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_THREAT_ANALYSIS / 002</span>
                         <h2>SOC Security Alert Triage</h2>
                         <p>Centralized alert queue, heuristic confidence scoring, and incident acknowledgment.</p>
                         <div class="header-actions">

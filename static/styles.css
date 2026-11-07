@@ -4,84 +4,91 @@
    ========================================================================== */
 
 :root {
-    /* Color Palette — SIGNAL / EVIDENCE exact tokens */
-    --obsidian: #0B0E10;          /* Primary canvas background */
-    --graphite: #151B1D;          /* Cards, panels, surfaces */
-    --graphite-light: #1D2427;    /* Active & elevated surfaces */
-    --graphite-surface: #182023;  /* Table & panel backgrounds */
-    --signal-lime: #B8F36B;       /* Primary signature accent */
-    --signal-lime-dim: rgba(184, 243, 107, 0.12);
-    --signal-lime-border: rgba(184, 243, 107, 0.35);
-    --evidence-white: #E8EAE3;    /* Primary high-contrast text */
-    --muted-grey: #A4AAA9;        /* Supporting text */
-    --border-grey: #343A3B;       /* Subtle thin borders */
-    --threat-coral: #FF6B57;      /* Critical alerts & malicious indicators */
-    --threat-coral-dim: rgba(255, 107, 87, 0.15);
-    --warning-amber: #E8B65A;     /* Warnings & caution notices */
-    --warning-amber-dim: rgba(232, 182, 90, 0.15);
+    /* Color Palette (Dark Mode First / Void Foundations) */
+    --bg-canvas: #0A0A0C;
+    --bg-surface-base: #0A0A0C;
+    --bg-surface-elevated: #121316;
+    --bg-surface-active: #1A1C23;
+    --bg-surface-inset: #0E0F12;
+    --bg-sidebar: #0E0F12;
+    --bg-topbar: #0E0F12;
 
-    /* Mapped Architectural Tokens */
-    --bg-canvas: #0B0E10;
-    --bg-surface-base: #0B0E10;
-    --bg-surface-elevated: #151B1D;
-    --bg-surface-active: #1D2427;
-    --bg-surface-inset: #0E1315;
-    --bg-sidebar: #0E1315;
-    --bg-topbar: #0E1315;
+    /* Intelligence Cyan (Primary Accent) */
+    --intel-cyan: #06B6D4;
+    --intel-cyan-dim: rgba(6, 182, 212, 0.12);
+    --intel-cyan-border: rgba(6, 182, 212, 0.25);
 
-    /* Typography & Foreground Tokens */
-    --text-primary: #E8EAE3;      /* Evidence White */
-    --text-secondary: #A4AAA9;    /* Muted Grey */
-    --text-muted: #747C7B;
-    --text-inverse: #0B0E10;      /* Dark text on Signal Lime */
+    /* Signal Green (Success / Verified) */
+    --signal-green: #10B981;
+    --signal-green-dim: rgba(16, 185, 129, 0.12);
+    --signal-green-border: rgba(16, 185, 129, 0.25);
 
-    /* Thin Border Hierarchy */
-    --border-subtle: #252B2D;
-    --border-default: #343A3B;
-    --border-hover: #4D5658;
-    --border-active: #B8F36B;
-    --border-focus: rgba(184, 243, 107, 0.5);
+    /* Alert Amber (Warning / Heuristic) */
+    --alert-amber: #F59E0B;
+    --alert-amber-dim: rgba(245, 158, 11, 0.12);
+    --alert-amber-border: rgba(245, 158, 11, 0.25);
 
-    /* Semantic Accents */
-    --accent-emerald: #B8F36B;    /* Signal Lime */
-    --accent-emerald-hover: #cbfaa0;
-    --accent-emerald-subtle: rgba(184, 243, 107, 0.12);
-    --accent-emerald-border: rgba(184, 243, 107, 0.35);
+    /* Critical Red (Breach / Port Scan) */
+    --critical-red: #EF4444;
+    --critical-red-dim: rgba(239, 68, 68, 0.15);
+    --critical-red-border: rgba(239, 68, 68, 0.3);
 
-    --accent-amber: #E8B65A;      /* Warning Amber */
-    --accent-amber-subtle: rgba(232, 182, 90, 0.12);
-    --accent-amber-border: rgba(232, 182, 90, 0.3);
+    /* Typography & Text */
+    --text-primary: #F8FAFC;      /* Alabaster */
+    --text-secondary: #94A3B8;    /* Muted Slate */
+    --text-muted: #64748B;
+    --text-inverse: #0A0A0C;
 
-    --accent-rose: #FF6B57;       /* Threat Coral */
-    --accent-rose-subtle: rgba(255, 107, 87, 0.15);
-    --accent-rose-border: rgba(255, 107, 87, 0.3);
+    /* Tactical Reticle Borders & Grid Lines */
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --border-default: rgba(255, 255, 255, 0.10);
+    --border-hover: rgba(6, 182, 212, 0.4);
+    --border-active: #06B6D4;
+    --border-focus: rgba(6, 182, 212, 0.5);
+    --border-color: var(--border-default);
 
-    --accent-sky: #B8F36B;        /* Signal Lime */
-    --accent-sky-subtle: rgba(184, 243, 107, 0.12);
-    --accent-sky-border: rgba(184, 243, 107, 0.35);
+    /* Semantic Aliases */
+    --accent-emerald: var(--intel-cyan);
+    --accent-emerald-hover: #22d3ee;
+    --accent-emerald-subtle: var(--intel-cyan-dim);
+    --accent-emerald-border: var(--intel-cyan-border);
+
+    --accent-amber: var(--alert-amber);
+    --accent-amber-subtle: var(--alert-amber-dim);
+    --accent-amber-border: var(--alert-amber-border);
+
+    --accent-rose: var(--critical-red);
+    --accent-rose-subtle: var(--critical-red-dim);
+    --accent-rose-border: var(--critical-red-border);
+
+    --accent-sky: var(--intel-cyan);
+    --accent-sky-subtle: var(--intel-cyan-dim);
+    --accent-sky-border: var(--intel-cyan-border);
+
+    --success: var(--signal-green);
+    --danger: var(--critical-red);
+    --warning: var(--alert-amber);
 
     /* Typography Families */
     --font-headline: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+
+    /* Micro radii / Crisp 90-degree corners */
+    --radius-sm: 2px;
+    --radius-md: 2px;
+    --radius-lg: 2px;
+    --radius-pill: 2px;
 
     /* Shadows & Transitions */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-    --shadow-card: 0 4px 14px -2px rgba(0, 0, 0, 0.5);
-    --shadow-panel: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
-    --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+    --shadow-card: 0 4px 14px -2px rgba(0, 0, 0, 0.6);
+    --shadow-panel: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+    --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.95);
 
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --radius-pill: 9999px;
-
-    --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-    --transition-smooth: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-
-    --border-color: var(--border-default);
-    --success: var(--accent-emerald);
-    --danger: var(--accent-rose);
+    /* Mechanical, Deterministic Transitions */
+    --transition-fast: 0.15s linear;
+    --transition-smooth: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ==========================================================================
@@ -219,14 +226,14 @@ code, pre, .hash-text, .ip-text, td code, .breadcrumb, .system-status, .brand-te
 }
 
 .nav-item.active {
-    background: linear-gradient(90deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.03) 100%);
-    color: #ffffff;
-    border-left-color: var(--accent-emerald);
+    background: linear-gradient(90deg, rgba(6, 182, 212, 0.14) 0%, rgba(6, 182, 212, 0.02) 100%);
+    color: var(--text-primary);
+    border-left-color: var(--intel-cyan);
     font-weight: 600;
 }
 
 .nav-item.active i {
-    color: var(--accent-emerald);
+    color: var(--intel-cyan);
 }
 
 .sidebar-footer {

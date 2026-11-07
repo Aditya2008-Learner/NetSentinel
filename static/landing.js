@@ -140,7 +140,7 @@
     }
 
     function drawGrid() {
-        ctx.strokeStyle = "rgba(52, 58, 59, 0.25)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
         ctx.lineWidth = 0.6;
         var gridSize = 40;
         for (var x = 0; x < width; x += gridSize) {
@@ -159,7 +159,7 @@
 
     function drawFrame(time) {
         ctx.clearRect(0, 0, width, height);
-        ctx.fillStyle = "#0B0E10"; // Obsidian background
+        ctx.fillStyle = "#0A0A0C"; // Background Canvas
         ctx.fillRect(0, 0, width, height);
 
         drawGrid();
@@ -179,13 +179,13 @@
             ctx.lineTo(b.x, b.y);
 
             if (isAnomaly) {
-                ctx.strokeStyle = "rgba(255, 107, 87, 0.75)"; // Threat Coral
+                ctx.strokeStyle = "rgba(239, 68, 68, 0.85)"; // Critical Red
                 ctx.lineWidth = 1.4;
             } else if (hot) {
-                ctx.strokeStyle = "rgba(232, 182, 90, 0.85)"; // Warning Amber
+                ctx.strokeStyle = "rgba(245, 158, 11, 0.85)"; // Alert Amber
                 ctx.lineWidth = 1.4;
             } else {
-                ctx.strokeStyle = "rgba(184, 243, 107, " + pulse + ")"; // Signal Lime
+                ctx.strokeStyle = "rgba(6, 182, 212, " + pulse + ")"; // Intelligence Cyan
                 ctx.lineWidth = 0.9;
             }
             ctx.stroke();
@@ -206,7 +206,7 @@
 
                 ctx.beginPath();
                 ctx.arc(x, y, 2.0, 0, Math.PI * 2);
-                ctx.fillStyle = isAnomaly ? "#FF6B57" : "#B8F36B";
+                ctx.fillStyle = isAnomaly ? "#EF4444" : "#06B6D4";
                 ctx.fill();
             });
         }
@@ -231,24 +231,24 @@
             // Subtle outer halo
             ctx.beginPath();
             ctx.arc(node.x, node.y, node.r + 3.5, 0, Math.PI * 2);
-            ctx.fillStyle = isAnomaly ? "rgba(255, 107, 87, 0.18)" : "rgba(184, 243, 107, 0.14)";
+            ctx.fillStyle = isAnomaly ? "rgba(239, 68, 68, 0.18)" : "rgba(6, 182, 212, 0.14)";
             ctx.fill();
 
             // Inner core node
             ctx.beginPath();
             ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
-            ctx.fillStyle = isAnomaly ? "#FF6B57" : (node.role === "gateway" ? "#B8F36B" : "#E8EAE3");
+            ctx.fillStyle = isAnomaly ? "#EF4444" : (node.role === "gateway" ? "#10B981" : "#06B6D4");
             ctx.fill();
 
             // Border
             ctx.lineWidth = 1;
-            ctx.strokeStyle = isAnomaly ? "#FF6B57" : "#B8F36B";
+            ctx.strokeStyle = isAnomaly ? "#EF4444" : "#06B6D4";
             ctx.stroke();
 
             // Technical label
             if (node.r > 5.0 && width > 480) {
-                ctx.fillStyle = "rgba(164, 170, 169, 0.75)";
-                ctx.font = "9px 'IBM Plex Mono', monospace";
+                ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
+                ctx.font = "9px 'JetBrains Mono', monospace";
                 ctx.fillText(node.label, node.x + 8, node.y + 3);
             }
         });
@@ -263,15 +263,15 @@
             var my = (a.y + b.y) * 0.5 - (1 - ev.life) * 14;
 
             ctx.save();
-            ctx.fillStyle = "rgba(21, 27, 29, 0.90)"; // Graphite
-            ctx.strokeStyle = "rgba(52, 58, 59, 0.8)";
+            ctx.fillStyle = "rgba(18, 19, 22, 0.95)"; // Container / Card Surface
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
             ctx.lineWidth = 1;
-            ctx.font = "10px 'IBM Plex Mono', monospace";
+            ctx.font = "10px 'JetBrains Mono', monospace";
             var textW = ctx.measureText(ev.text).width;
             ctx.fillRect(mx - textW / 2 - 6, my - 9, textW + 12, 18);
             ctx.strokeRect(mx - textW / 2 - 6, my - 9, textW + 12, 18);
 
-            ctx.fillStyle = "#B8F36B";
+            ctx.fillStyle = "#06B6D4";
             ctx.fillText(ev.text, mx - textW / 2, my + 3);
             ctx.restore();
 
