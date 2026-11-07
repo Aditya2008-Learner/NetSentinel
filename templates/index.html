@@ -826,7 +826,64 @@
                 <section id="settings-view" class="view-panel">
                     <div class="section-header">
                         <h2>Platform Settings</h2>
-                        <p>Configure detection thresholds and operational modes.</p>
+                        <p>Configure audio feedback, detection thresholds, and operational modes.</p>
+                    </div>
+
+                    <!-- Audio & Sound Feedback Card -->
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3 style="margin: 0;"><i class="fa-solid fa-volume-high" style="color: var(--accent-emerald); margin-right: 8px;"></i> Audio Feedback System</h3>
+                            <span id="sound-status-badge" class="badge badge-success"><i class="fa-solid fa-check" style="font-size: 0.65rem; margin-right: 4px;"></i> Enabled</span>
+                        </div>
+                        <p style="color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 16px;">
+                            Procedural Web Audio API sound synthesis tailored for Security Operations Center event feedback. Audio unlocks on first user interaction.
+                        </p>
+
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-title">Sound Effects</span>
+                                <span class="setting-desc">Enable subtle acoustic feedback for completed tasks, errors, security events, and key actions</span>
+                            </div>
+                            <div class="switch-container">
+                                <label class="switch" for="sound-toggle" aria-label="Toggle Sound Effects">
+                                    <input type="checkbox" id="sound-toggle" checked role="switch" aria-checked="true" />
+                                    <span class="slider-round"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-title">Feedback Volume</span>
+                                <span class="setting-desc">Adjust the master gain level of synthesized alerts and chimes</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <i class="fa-solid fa-volume-low" style="color: var(--text-muted); font-size: 0.85rem;"></i>
+                                <input type="range" id="sound-volume-slider" class="sound-range-input" min="0" max="100" value="50" aria-label="Audio Feedback Volume" />
+                                <span id="sound-volume-label" style="font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; color: var(--text-primary); min-width: 38px;">50%</span>
+                            </div>
+                        </div>
+
+                        <div class="setting-item" style="border-bottom: none; padding-bottom: 0;">
+                            <div class="setting-info">
+                                <span class="setting-title">Audition Palette</span>
+                                <span class="setting-desc">Preview synthesized tones calibrated for enterprise operations</span>
+                            </div>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-secondary" id="test-sound-success-btn" style="padding: 6px 12px; font-size: 0.78rem;">
+                                    <i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i> Success
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="test-sound-error-btn" style="padding: 6px 12px; font-size: 0.78rem;">
+                                    <i class="fa-solid fa-circle-xmark" style="color: var(--accent-rose);"></i> Error
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="test-sound-alert-btn" style="padding: 6px 12px; font-size: 0.78rem;">
+                                    <i class="fa-solid fa-triangle-exclamation" style="color: var(--accent-amber);"></i> Alert
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="test-sound-click-btn" style="padding: 6px 12px; font-size: 0.78rem;">
+                                    <i class="fa-solid fa-hand-pointer" style="color: var(--accent-sky);"></i> Click
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -944,6 +1001,7 @@
         </div>
     </div>
 
+    <script src="/static/sound.js?v=1.0"></script>
     <script src="/static/app.js?v=2.1"></script>
 </body>
 </html>

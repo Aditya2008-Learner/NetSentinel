@@ -53,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initModals();
     loadOverviewData();
     initTelemetryChart();
+    initAudioSettings();
 
     // Mobile navigation drawer toggle wiring
     const hamburgerBtn = document.getElementById("hamburger-btn");
@@ -142,13 +143,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (closeInvestigationModalBtn) closeInvestigationModalBtn.addEventListener("click", closeModal);
 
     const cancelInvestigationModalBtn = document.getElementById("cancel-investigation-modal-btn");
-    if (cancelInvestigationModalBtn) cancelInvestigationModalBtn.addEventListener("click", closeModal);
+    if (cancelInvestigationModalBtn) cancelInvestigationModalBtn.addEventListener("click", () => {
+        if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+        closeModal();
+    });
 
     const closeDeviceModalBtn = document.getElementById("close-device-modal-btn");
     if (closeDeviceModalBtn) closeDeviceModalBtn.addEventListener("click", closeDeviceModal);
 
     const cancelDeviceModalBtn = document.getElementById("cancel-device-modal-btn");
-    if (cancelDeviceModalBtn) cancelDeviceModalBtn.addEventListener("click", closeDeviceModal);
+    if (cancelDeviceModalBtn) cancelDeviceModalBtn.addEventListener("click", () => {
+        if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+        closeDeviceModal();
+    });
 
     const newDeviceForm = document.getElementById("new-device-form");
     if (newDeviceForm) newDeviceForm.addEventListener("submit", handleCreateDevice);
@@ -179,6 +186,10 @@ let currentAnalyticsRange = "24H";
 
 // View switching with coordinated fade and spring animation
 function switchView(targetId) {
+    if (window.NetSentinelSound) {
+        window.NetSentinelSound.play("click");
+    }
+
     if (_switchViewTimer) {
         clearTimeout(_switchViewTimer);
         _switchViewTimer = null;
@@ -905,10 +916,16 @@ async function triggerAttackSimulation() {
         events: simulatedEvents,
         summary: { total: simulatedEvents.length, by_severity: { high: 1, medium: 0, low: 0 } }
     });
+    if (window.NetSentinelSound) {
+        window.NetSentinelSound.play("alert");
+    }
 }
 
 // Reset attack simulation — clears demo state and the results table.
 async function resetAttackSimulation() {
+    if (window.NetSentinelSound) {
+        window.NetSentinelSound.play("click");
+    }
     localSimulationActive = false;
     localActiveScenario = null;
 
@@ -928,6 +945,9 @@ async function resetAttackSimulation() {
 
 // Toggle live telemetry polling. Guarantees exactly one interval is active.
 function toggleTelemetryLive() {
+    if (window.NetSentinelSound) {
+        window.NetSentinelSound.play("click");
+    }
     const btn = document.getElementById("telemetry-toggle-btn");
     if (telemetryPaused) {
         telemetryPaused = false;
@@ -1208,6 +1228,7 @@ function initForms() {
 
             const file = (logFileInput && logFileInput.files && logFileInput.files[0]) || stagedLogFile;
             if (!file) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 showNotification("Please select or drop a CSV file to analyze.", "error");
                 return;
             }
@@ -1236,6 +1257,7 @@ function initForms() {
                 try {
                     data = await res.json();
                 } catch (_) {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                     showNotification("Server returned non-JSON response (status " + res.status + ")", "error");
                     return;
                 }
@@ -1243,10 +1265,18 @@ function initForms() {
                 if (res.ok) {
                     loadNetworkResults(data);
                     loadAnalysisHistory();
+                    const hasHighSeverity = data.events && data.events.some(ev => {
+                        const s = String(ev.severity || "").toUpperCase();
+                        return s === "HIGH" || s === "CRITICAL" || s === "DANGER";
+                    });
+                    if (window.NetSentinelSound) {
+                        window.NetSentinelSound.play(hasHighSeverity ? "alert" : "success");
+                    }
                     showNotification(`Analysis complete: ${data.events.length} suspicious events detected out of ${data.summary && data.summary.total_records_analyzed ? data.summary.total_records_analyzed : data.events.length} records.`, data.events.length > 0 ? "warning" : "success");
                     const container = document.getElementById("network-results-container");
                     if (container) container.scrollIntoView({ behavior: "smooth", block: "nearest" });
                 } else {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                     let errorMsg = "Analysis failed";
                     if (data && data.detail) {
                         if (typeof data.detail === "string") {
@@ -1281,6 +1311,7 @@ function initForms() {
                     showNotification(errorMsg, "error");
                 }
             } catch (err) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 showNetworkError();
             } finally {
                 _isAnalyzing = false;
@@ -1329,6 +1360,7 @@ function initForms() {
             const file = embedImageInput ? embedImageInput.files[0] : null;
             const secret = document.getElementById("embed-secret").value;
             if (!file) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 showNotification("Please select a cover PNG image.", "error");
                 return;
             }
@@ -1342,6 +1374,7 @@ function initForms() {
                 const box = document.getElementById("embed-result");
                 box.classList.remove("hidden");
                 if (res.ok) {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("success");
                     box.className = "result-box result-success";
                     const downloadHref = data.image_data || data.download_url;
                     const fileName = data.filename || "encoded_image.png";
@@ -1365,6 +1398,7 @@ function initForms() {
                         </a>
                     `;
                 } else {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                     box.className = "result-box result-danger";
                     const errorMsg = data && data.detail ? data.detail : "Embedding failed.";
                     box.innerHTML = `
@@ -1377,6 +1411,7 @@ function initForms() {
                     `;
                 }
             } catch (err) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 const box = document.getElementById("embed-result");
                 if (box) {
                     box.className = "result-box result-danger";
@@ -1432,6 +1467,7 @@ function initForms() {
             const fileInput = document.getElementById("extract-image");
             const file = fileInput && fileInput.files ? fileInput.files[0] : null;
             if (!file) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 showNotification("Please select a file first.", "error");
                 return;
             }
@@ -1444,6 +1480,7 @@ function initForms() {
                 const box = document.getElementById("extract-result");
                 box.classList.remove("hidden");
                 if (res.ok) {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("success");
                     box.className = "result-box result-success";
                     box.innerHTML = `
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
@@ -1479,6 +1516,7 @@ function initForms() {
                         });
                     }
                 } else {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                     box.className = "result-box result-danger";
                     const errorMsg = data && data.detail ? data.detail : "Extraction failed.";
                     box.innerHTML = `
@@ -1492,6 +1530,7 @@ function initForms() {
                     `;
                 }
             } catch (err) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 const box = document.getElementById("extract-result");
                 if (box) {
                     box.className = "result-box result-danger";
@@ -1550,6 +1589,7 @@ function initForms() {
             e.preventDefault();
             const file = forensicsFile ? forensicsFile.files[0] : null;
             if (!file) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 showNotification("Please select an image file.", "error");
                 return;
             }
@@ -1559,6 +1599,11 @@ function initForms() {
             try {
                 const res = await fetch("/api/forensics/analyze", { method: "POST", body: formData });
                 const data = await res.json();
+                if (res.ok) {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("success");
+                } else {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                }
                 const container = document.getElementById("forensics-results");
                 container.classList.remove("hidden");
                 const details = document.getElementById("forensics-details");
@@ -1583,6 +1628,7 @@ function initForms() {
                     <div class="forensics-indicators-card"><strong>Heuristic Indicators</strong><ul class="forensics-indicator-list">${(data.indicators || []).map(i => `<li>${escapeHtml(i)}</li>`).join("")}</ul></div>
                 `;
             } catch (err) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 showNotification("Forensics analysis failed.", "error");
             }
         });
@@ -1596,6 +1642,7 @@ function initForms() {
             const fileInput = document.getElementById("integrity-file");
             const file = fileInput && fileInput.files ? fileInput.files[0] : null;
             if (!file) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 showNotification("Please select a file first.", "error");
                 return;
             }
@@ -1607,6 +1654,19 @@ function initForms() {
             try {
                 const res = await fetch("/api/integrity/verify", { method: "POST", body: formData });
                 const data = await res.json();
+                if (res.ok) {
+                    if (data.reference_hash) {
+                        if (data.match) {
+                            if (window.NetSentinelSound) window.NetSentinelSound.play("success");
+                        } else {
+                            if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                        }
+                    } else {
+                        if (window.NetSentinelSound) window.NetSentinelSound.play("success");
+                    }
+                } else {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                }
                 const box = document.getElementById("integrity-result");
                 box.classList.remove("hidden");
 
@@ -1700,14 +1760,17 @@ function initForms() {
                     body: formData
                 });
                 if (res.ok) {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("success");
                     closeModal();
                     loadInvestigations();
                     loadOverviewData();
                     showNotification("Investigation case created successfully", "success");
                 } else {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                     showNotification("Failed to create investigation.", "error");
                 }
             } catch (err) {
+                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
                 showNotification("Request failed.", "error");
             }
         });
@@ -2009,6 +2072,7 @@ async function loadDevices() {
 }
 
 function openNewDeviceModal() {
+    if (window.NetSentinelSound) window.NetSentinelSound.play("click");
     const modal = document.getElementById("device-modal");
     if (modal) modal.classList.remove("hidden");
 }
@@ -2043,11 +2107,13 @@ async function handleCreateDevice(e) {
             const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : "Failed to add device";
             throw new Error(detail);
         }
+        if (window.NetSentinelSound) window.NetSentinelSound.play("success");
         showNotification("Device added successfully", "success");
         closeDeviceModal();
         loadDevices();
         loadOverviewData();
     } catch (err) {
+        if (window.NetSentinelSound) window.NetSentinelSound.play("error");
         showNotification(err.message, "error");
     }
 }
@@ -2063,10 +2129,12 @@ async function deleteDevice(deviceId) {
             const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : "Failed to remove device";
             throw new Error(detail);
         }
+        if (window.NetSentinelSound) window.NetSentinelSound.play("success");
         showNotification("Device removed successfully", "success");
         loadDevices();
         loadOverviewData();
     } catch (err) {
+        if (window.NetSentinelSound) window.NetSentinelSound.play("error");
         showNotification(err.message, "error");
     }
 }
@@ -2231,6 +2299,7 @@ function initModals() {
 }
 
 function openNewInvestigationModal() {
+    if (window.NetSentinelSound) window.NetSentinelSound.play("click");
     const modal = document.getElementById("investigation-modal");
     if (modal) modal.classList.remove("hidden");
 }
@@ -2287,8 +2356,10 @@ async function generateReport() {
         a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        if (window.NetSentinelSound) window.NetSentinelSound.play("success");
         showNotification("Investigation report exported successfully", "success");
     } catch (err) {
+        if (window.NetSentinelSound) window.NetSentinelSound.play("error");
         showNotification("Failed to generate report.", "error");
     }
 }
@@ -2607,9 +2678,11 @@ async function triageSocAlert(alertId, status) {
             body: JSON.stringify({ status: status, analyst: "Lead-SOC-Analyst" })
         });
         if (!res.ok) throw new Error("Triage update failed");
+        if (window.NetSentinelSound) window.NetSentinelSound.play("success");
         showNotification(`Alert ${alertId} marked as ${status}`, "success");
         loadSocAlerts();
     } catch (err) {
+        if (window.NetSentinelSound) window.NetSentinelSound.play("error");
         showNotification("Failed to update alert status", "error");
     }
 }
@@ -2677,4 +2750,72 @@ async function loadNetworkTopology() {
     } catch (err) {
         console.error(err);
     }
+}
+
+// ==========================================================================
+// Audio Feedback Settings Controller
+// ==========================================================================
+function initAudioSettings() {
+    const toggle = document.getElementById("sound-toggle");
+    const slider = document.getElementById("sound-volume-slider");
+    const label = document.getElementById("sound-volume-label");
+    const badge = document.getElementById("sound-status-badge");
+    const testSuccessBtn = document.getElementById("test-sound-success-btn");
+    const testErrorBtn = document.getElementById("test-sound-error-btn");
+    const testAlertBtn = document.getElementById("test-sound-alert-btn");
+    const testClickBtn = document.getElementById("test-sound-click-btn");
+
+    if (!window.NetSentinelSound) return;
+
+    function updateBadge(active) {
+        if (!badge) return;
+        if (active) {
+            badge.className = "badge badge-success";
+            badge.innerHTML = '<i class="fa-solid fa-check" style="font-size: 0.65rem; margin-right: 4px;"></i> Enabled';
+        } else {
+            badge.className = "badge badge-muted";
+            badge.innerHTML = '<i class="fa-solid fa-volume-xmark" style="font-size: 0.65rem; margin-right: 4px;"></i> Disabled';
+        }
+    }
+
+    const isEnabled = window.NetSentinelSound.isEnabled();
+    const volumePercent = Math.round(window.NetSentinelSound.getVolume() * 100);
+
+    if (toggle) {
+        toggle.checked = isEnabled;
+        toggle.setAttribute("aria-checked", isEnabled ? "true" : "false");
+        updateBadge(isEnabled);
+
+        toggle.addEventListener("change", () => {
+            const checked = toggle.checked;
+            toggle.setAttribute("aria-checked", checked ? "true" : "false");
+            window.NetSentinelSound.setEnabled(checked);
+            updateBadge(checked);
+            if (checked) {
+                window.NetSentinelSound.play("success");
+            }
+            showNotification(`Sound effects ${checked ? "enabled" : "disabled"}. Preference saved.`, "info");
+        });
+    }
+
+    if (slider) {
+        slider.value = volumePercent;
+        if (label) label.textContent = `${volumePercent}%`;
+
+        slider.addEventListener("input", () => {
+            const val = parseInt(slider.value, 10) || 0;
+            if (label) label.textContent = `${val}%`;
+            window.NetSentinelSound.setVolume(val / 100);
+        });
+
+        slider.addEventListener("change", () => {
+            window.NetSentinelSound.play("click");
+            showNotification("Volume level updated.", "info");
+        });
+    }
+
+    if (testSuccessBtn) testSuccessBtn.addEventListener("click", () => window.NetSentinelSound.play("success"));
+    if (testErrorBtn) testErrorBtn.addEventListener("click", () => window.NetSentinelSound.play("error"));
+    if (testAlertBtn) testAlertBtn.addEventListener("click", () => window.NetSentinelSound.play("alert"));
+    if (testClickBtn) testClickBtn.addEventListener("click", () => window.NetSentinelSound.play("click"));
 }
