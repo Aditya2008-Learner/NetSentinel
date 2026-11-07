@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
@@ -26,10 +26,10 @@
         <!-- Sidebar Navigation -->
         <aside class="sidebar" id="sidebar">
             <a href="/" class="brand-area" style="text-decoration: none; display: flex; align-items: center; gap: 12px; color: inherit;" title="Return to Net Sentinel Landing Page">
-                <i class="fa-solid fa-shield-halved brand-icon"></i>
+                <span class="brand-symbol" style="width: 14px; height: 14px; background-color: var(--signal-lime); border-radius: 2px; box-shadow: 0 0 10px rgba(184, 243, 107, 0.4); display: inline-block;"></span>
                 <div class="brand-text">
-                    <h2>Net Sentinel</h2>
-                    <span>Security & Forensics</span>
+                    <h2>NET SENTINEL</h2>
+                    <span>SIGNAL / EVIDENCE</span>
                 </div>
             </a>
 
@@ -114,8 +114,9 @@
                 <section id="overview-view" class="view-panel active">
                     <div class="welcome-banner">
                         <div class="banner-text">
-                            <h1>Network Intelligence. Threat Detection. Digital Forensics.</h1>
-                            <p>Authorized security monitoring, explainable anomaly detection, steganography analysis, and file integrity verification for academic & operational environments.</p>
+                            <span class="badge badge-info" style="margin-bottom: 8px; display: inline-flex; font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;">SIGNAL / EVIDENCE &bull; LAB 001</span>
+                            <h1>Every connection leaves a trace.</h1>
+                            <p>Precision-engineered digital intelligence, threat detection, and forensic evidence verification workspace.</p>
                         </div>
                         <div class="banner-actions">
                             <button class="btn btn-primary" data-action="switch-view" data-target="investigations-view">

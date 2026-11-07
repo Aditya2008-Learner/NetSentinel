@@ -1,71 +1,84 @@
 /* ==========================================================================
-   Net Sentinel — Enterprise Security Operations Center (SOC) Design System
-   Visual Direction: Deep ink/navy surfaces, crisp typography, layered depth,
-   restrained forest-green primary accents, amber warning, and red critical.
+   Net Sentinel — SIGNAL / EVIDENCE: The Digital Intelligence Laboratory
+   Design System Tokens & Workspace Styling
    ========================================================================== */
 
 :root {
-    /* Color Palette - Deep Slate / Ink Tonal Architecture */
-    --bg-canvas: #090d16;          /* Deepest background tone */
-    --bg-surface-base: #0f172a;    /* Main workspace canvas */
-    --bg-surface-elevated: #151f34;/* Card & panel surfaces */
-    --bg-surface-active: #1c2944;  /* Raised hover / active panels */
-    --bg-surface-inset: #090e1c;   /* Inset well / terminal inputs */
-    --bg-sidebar: #0b1120;         /* Dedicated persistent sidebar tone */
-    --bg-topbar: #0d1527;          /* Subdued header tone */
+    /* Color Palette — SIGNAL / EVIDENCE exact tokens */
+    --obsidian: #0B0E10;          /* Primary canvas background */
+    --graphite: #151B1D;          /* Cards, panels, surfaces */
+    --graphite-light: #1D2427;    /* Active & elevated surfaces */
+    --graphite-surface: #182023;  /* Table & panel backgrounds */
+    --signal-lime: #B8F36B;       /* Primary signature accent */
+    --signal-lime-dim: rgba(184, 243, 107, 0.12);
+    --signal-lime-border: rgba(184, 243, 107, 0.35);
+    --evidence-white: #E8EAE3;    /* Primary high-contrast text */
+    --muted-grey: #A4AAA9;        /* Supporting text */
+    --border-grey: #343A3B;       /* Subtle thin borders */
+    --threat-coral: #FF6B57;      /* Critical alerts & malicious indicators */
+    --threat-coral-dim: rgba(255, 107, 87, 0.15);
+    --warning-amber: #E8B65A;     /* Warnings & caution notices */
+    --warning-amber-dim: rgba(232, 182, 90, 0.15);
+
+    /* Mapped Architectural Tokens */
+    --bg-canvas: #0B0E10;
+    --bg-surface-base: #0B0E10;
+    --bg-surface-elevated: #151B1D;
+    --bg-surface-active: #1D2427;
+    --bg-surface-inset: #0E1315;
+    --bg-sidebar: #0E1315;
+    --bg-topbar: #0E1315;
 
     /* Typography & Foreground Tokens */
-    --text-primary: #f8fafc;       /* High-contrast crisp white */
-    --text-secondary: #94a3b8;     /* Clean supporting gray */
-    --text-muted: #64748b;         /* Low-prominence captions */
-    --text-inverse: #020617;       /* Dark text on bright accent buttons */
+    --text-primary: #E8EAE3;      /* Evidence White */
+    --text-secondary: #A4AAA9;    /* Muted Grey */
+    --text-muted: #747C7B;
+    --text-inverse: #0B0E10;      /* Dark text on Signal Lime */
 
-    /* Subtle Border Hierarchy (Rich depth without harsh outlines) */
-    --border-subtle: #1e293b;
-    --border-default: #26354f;
-    --border-hover: #3b5074;
-    --border-active: #38bdf8;
-    --border-focus: rgba(16, 185, 129, 0.5);
+    /* Thin Border Hierarchy */
+    --border-subtle: #252B2D;
+    --border-default: #343A3B;
+    --border-hover: #4D5658;
+    --border-active: #B8F36B;
+    --border-focus: rgba(184, 243, 107, 0.5);
 
-    /* Enterprise Semantic Accents */
-    --accent-emerald: #10b981;     /* Restrained forest green for healthy states / primary CTAs */
-    --accent-emerald-hover: #059669;
-    --accent-emerald-subtle: rgba(16, 185, 129, 0.12);
-    --accent-emerald-border: rgba(16, 185, 129, 0.3);
+    /* Semantic Accents */
+    --accent-emerald: #B8F36B;    /* Signal Lime */
+    --accent-emerald-hover: #cbfaa0;
+    --accent-emerald-subtle: rgba(184, 243, 107, 0.12);
+    --accent-emerald-border: rgba(184, 243, 107, 0.35);
 
-    --accent-amber: #f59e0b;       /* Muted amber for warnings / demo notices */
-    --accent-amber-subtle: rgba(245, 158, 11, 0.12);
-    --accent-amber-border: rgba(245, 158, 11, 0.28);
+    --accent-amber: #E8B65A;      /* Warning Amber */
+    --accent-amber-subtle: rgba(232, 182, 90, 0.12);
+    --accent-amber-border: rgba(232, 182, 90, 0.3);
 
-    --accent-rose: #f43f5e;        /* Restrained red for critical alerts / threat detections */
-    --accent-rose-subtle: rgba(244, 63, 94, 0.12);
-    --accent-rose-border: rgba(244, 63, 94, 0.28);
+    --accent-rose: #FF6B57;       /* Threat Coral */
+    --accent-rose-subtle: rgba(255, 107, 87, 0.15);
+    --accent-rose-border: rgba(255, 107, 87, 0.3);
 
-    --accent-sky: #38bdf8;         /* Cyan/Sky for telemetry metrics and info indicators */
-    --accent-sky-subtle: rgba(56, 189, 248, 0.12);
-    --accent-sky-border: rgba(56, 189, 248, 0.28);
+    --accent-sky: #B8F36B;        /* Signal Lime */
+    --accent-sky-subtle: rgba(184, 243, 107, 0.12);
+    --accent-sky-border: rgba(184, 243, 107, 0.35);
 
-    /* Controlled Layered Shadows (Tonal depth) */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
-    --shadow-card: 0 4px 12px -2px rgba(2, 6, 23, 0.45), 0 2px 4px -2px rgba(2, 6, 23, 0.25);
-    --shadow-panel: 0 10px 25px -5px rgba(2, 6, 23, 0.6), 0 8px 10px -6px rgba(2, 6, 23, 0.3);
+    /* Typography Families */
+    --font-headline: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+    /* Shadows & Transitions */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 4px 14px -2px rgba(0, 0, 0, 0.5);
+    --shadow-panel: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
     --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
 
-    /* Consistent Radius Tokens */
     --radius-sm: 4px;
     --radius-md: 8px;
     --radius-lg: 12px;
     --radius-pill: 9999px;
 
-    /* Spacing Units */
     --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     --transition-smooth: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 
-    /* Motion Spring Easing Tokens (Physical Harmonic Oscillator Approximation) */
-    --ease-spring-bouncy: linear(0, 0.2044, 0.5399, 0.8012, 0.9501, 1.0133, 1.0283, 1.0233, 1.0138, 1.0061, 1.0016, 0.9997, 1);
-    --ease-spring-snappy: linear(0, 0.382, 0.7797, 0.9531, 1.0008, 1.0061, 1.0033, 1);
-
-    /* Semantic Aliases */
     --border-color: var(--border-default);
     --success: var(--accent-emerald);
     --danger: var(--accent-rose);
@@ -81,21 +94,28 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--font-body);
     background-color: var(--bg-canvas);
     color: var(--text-primary);
-    line-height: 1.5;
+    line-height: 1.55;
     font-size: 0.92rem;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
 }
 
-code, pre, .hash-text, .ip-text, td code {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.83rem;
+h1, h2, h3, h4, .brand-text h2, .section-header h2 {
+    font-family: var(--font-headline);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--evidence-white);
+}
+
+code, pre, .hash-text, .ip-text, td code, .breadcrumb, .system-status, .brand-text span, .metric-label, .time-axis-labels {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
     background: var(--bg-surface-inset);
-    color: #cbd5e1;
+    color: var(--text-primary);
     padding: 2px 6px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-subtle);

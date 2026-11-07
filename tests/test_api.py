@@ -589,12 +589,10 @@ def test_api_global_search():
 def test_landing_page_serves_landing_html():
     response = client.get("/")
     assert response.status_code == 200
-    assert "See Everything. Secure What Matters." in response.text
-    assert "Intelligent visibility for network security." in response.text
-    assert "Open Dashboard" in response.text
-    assert "DEMO ENVIRONMENT" in response.text
-    assert "Explore Dashboard" in response.text
-    assert "Discover Capabilities" in response.text
+    assert "SIGNAL / EVIDENCE" in response.text
+    assert "Every connection" in response.text
+    assert "leaves a trace" in response.text
+    assert "Open Workspace" in response.text
     assert "network-canvas" in response.text
     assert response.headers.get("x-content-type-options") == "nosniff"
     assert response.headers.get("x-frame-options") == "DENY"

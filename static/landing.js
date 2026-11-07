@@ -1,4 +1,11 @@
+/**
+ * Net Sentinel — SIGNAL / EVIDENCE
+ * Digital Intelligence Laboratory — Network Canvas Controller
+ */
+
 (function () {
+    "use strict";
+
     var toggle = document.getElementById("menu-toggle");
     var drawer = document.getElementById("mobile-drawer");
 
@@ -31,7 +38,7 @@
     if (!canvas || !canvas.getContext) return;
 
     var ctx = canvas.getContext("2d");
-    let reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var dpr = 1;
     var width = 0;
     var height = 0;
@@ -40,10 +47,10 @@
     var edges = [];
     var particles = [];
     var events = [];
-    let rafId = 0;
+    var rafId = 0;
 
-    var labels = ["GATEWAY", "SENSOR", "ANALYSIS", "SERVER", "ENDPOINT"];
-    var badges = ["FLOW OK", "PORT SCAN BLOCKED", "SHA-256 VERIFIED"];
+    var labels = ["GATEWAY-01", "INGRESS-SENSOR", "NEURAL-ANALYST", "DMZ-ROUTER", "FORENSIC-HOST"];
+    var badges = ["SIGNAL VERIFIED", "ANOMALY ISOLATED", "SHA-256 HASH MATCH", "LSB STEGO DETECTED"];
 
     function rand(min, max) {
         return min + Math.random() * (max - min);
@@ -67,29 +74,29 @@
     function initParticles() {
         particles = [];
         if (!reduced) {
-            var pCount = Math.min(edges.length, 14);
+            var pCount = Math.min(edges.length, 16);
             for (var p = 0; p < pCount; p++) {
                 particles.push({
                     edge: p % edges.length,
                     t: rand(0, 1),
-                    speed: rand(0.0016, 0.0034)
+                    speed: rand(0.0018, 0.0036)
                 });
             }
         }
     }
 
     function buildGraph() {
-        var count = width < 520 ? 16 : 20;
+        var count = width < 520 ? 14 : 22;
         nodes = [];
-        var roles = ["gateway", "analysis", "sensor", "server", "sensor", "endpoint"];
+        var roles = ["gateway", "analysis", "sensor", "anomaly", "server", "endpoint"];
         for (var i = 0; i < count; i++) {
-            var role = roles[i % roles.length];
+            var role = (i === 3 || i === 9) ? "anomaly" : roles[i % roles.length];
             nodes.push({
-                x: rand(width * 0.1, width * 0.9),
-                y: rand(height * 0.12, height * 0.88),
+                x: rand(width * 0.08, width * 0.92),
+                y: rand(height * 0.10, height * 0.90),
                 bx: 0,
                 by: 0,
-                r: role === "gateway" ? 7 : role === "analysis" ? 6 : 4.5,
+                r: role === "gateway" ? 6.5 : role === "anomaly" ? 6.0 : role === "analysis" ? 5.5 : 4.0,
                 role: role,
                 label: labels[i % labels.length],
                 phase: rand(0, Math.PI * 2)
@@ -112,8 +119,8 @@
                 }
             }
             edges.push({ a: n, b: nearest, pulse: rand(0, 1) });
-            if (n % 3 === 0 && n > 2) {
-                edges.push({ a: n, b: (nearest + 3) % n, pulse: rand(0, 1) });
+            if (n % 4 === 0 && n > 2) {
+                edges.push({ a: n, b: (nearest + 2) % n, pulse: rand(0, 1) });
             }
         }
 
@@ -132,26 +139,59 @@
         if (events.length > 2) events.shift();
     }
 
+    function drawGrid() {
+        ctx.strokeStyle = "rgba(52, 58, 59, 0.25)";
+        ctx.lineWidth = 0.6;
+        var gridSize = 40;
+        for (var x = 0; x < width; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        }
+        for (var y = 0; y < height; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+    }
+
     function drawFrame(time) {
         ctx.clearRect(0, 0, width, height);
-        ctx.fillStyle = "#090d1a";
+        ctx.fillStyle = "#0B0E10"; // Obsidian background
         ctx.fillRect(0, 0, width, height);
+
+        drawGrid();
 
         var t = reduced ? 0 : time * 0.001;
 
+        // Draw connections
         edges.forEach(function (edge, index) {
             var a = nodes[edge.a];
             var b = nodes[edge.b];
+            var isAnomaly = a.role === "anomaly" || b.role === "anomaly";
             var hot = events.some(function (ev) { return ev.edge === index && ev.life > 0.15; });
-            var pulse = reduced ? 0.45 : 0.28 + 0.22 * (0.5 + 0.5 * Math.sin(t * 1.6 + edge.pulse * 6));
+            var pulse = reduced ? 0.35 : 0.22 + 0.18 * (0.5 + 0.5 * Math.sin(t * 1.8 + edge.pulse * 5));
+
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = hot ? "rgba(245, 158, 11, 0.75)" : "rgba(34, 197, 94, " + pulse + ")";
-            ctx.lineWidth = hot ? 1.6 : 1;
+
+            if (isAnomaly) {
+                ctx.strokeStyle = "rgba(255, 107, 87, 0.75)"; // Threat Coral
+                ctx.lineWidth = 1.4;
+            } else if (hot) {
+                ctx.strokeStyle = "rgba(232, 182, 90, 0.85)"; // Warning Amber
+                ctx.lineWidth = 1.4;
+            } else {
+                ctx.strokeStyle = "rgba(184, 243, 107, " + pulse + ")"; // Signal Lime
+                ctx.lineWidth = 0.9;
+            }
             ctx.stroke();
         });
 
+        // Draw particles traveling along edges
         if (!reduced) {
             particles.forEach(function (particle) {
                 particle.t += particle.speed;
@@ -160,128 +200,120 @@
                 if (!edge) return;
                 var a = nodes[edge.a];
                 var b = nodes[edge.b];
+                var isAnomaly = a.role === "anomaly" || b.role === "anomaly";
                 var x = a.x + (b.x - a.x) * particle.t;
                 var y = a.y + (b.y - a.y) * particle.t;
+
                 ctx.beginPath();
-                ctx.arc(x, y, 2.1, 0, Math.PI * 2);
-                ctx.fillStyle = "#38bdf8";
+                ctx.arc(x, y, 2.0, 0, Math.PI * 2);
+                ctx.fillStyle = isAnomaly ? "#FF6B57" : "#B8F36B";
                 ctx.fill();
             });
         }
 
+        // Draw nodes
         nodes.forEach(function (node) {
             if (!reduced) {
                 var dx = mouse.x - node.x;
                 var dy = mouse.y - node.y;
                 var dist = Math.hypot(dx, dy);
-                if (dist < 90 && dist > 0.01) {
-                    node.x += dx * 0.012;
-                    node.y += dy * 0.012;
+                if (dist < 100 && dist > 0.01) {
+                    node.x += dx * 0.015;
+                    node.y += dy * 0.015;
                 } else {
-                    node.x += (node.bx - node.x) * 0.04;
-                    node.y += (node.by - node.y) * 0.04;
+                    node.x += (node.bx - node.x) * 0.035;
+                    node.y += (node.by - node.y) * 0.035;
                 }
             }
-            var alerted = events.some(function (ev) {
-                var edge = edges[ev.edge];
-                return edge && ev.life > 0.2 && (edge.a === nodes.indexOf(node) || edge.b === nodes.indexOf(node));
-            });
+
+            var isAnomaly = node.role === "anomaly";
+
+            // Subtle outer halo
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, node.r + 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = isAnomaly ? "rgba(255, 107, 87, 0.18)" : "rgba(184, 243, 107, 0.14)";
+            ctx.fill();
+
+            // Inner core node
             ctx.beginPath();
             ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
-            ctx.fillStyle = alerted ? "#f59e0b" : (node.role === "gateway" ? "#22c55e" : "#10b981");
+            ctx.fillStyle = isAnomaly ? "#FF6B57" : (node.role === "gateway" ? "#B8F36B" : "#E8EAE3");
             ctx.fill();
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = alerted ? "rgba(245, 158, 11, 0.25)" : "rgba(16, 185, 129, 0.18)";
+
+            // Border
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = isAnomaly ? "#FF6B57" : "#B8F36B";
             ctx.stroke();
+
+            // Technical label
+            if (node.r > 5.0 && width > 480) {
+                ctx.fillStyle = "rgba(164, 170, 169, 0.75)";
+                ctx.font = "9px 'IBM Plex Mono', monospace";
+                ctx.fillText(node.label, node.x + 8, node.y + 3);
+            }
         });
 
+        // Event text tags
         events.forEach(function (ev) {
             var edge = edges[ev.edge];
             if (!edge) return;
             var a = nodes[edge.a];
             var b = nodes[edge.b];
-            var x = (a.x + b.x) / 2;
-            var y = (b.y + a.y) / 2 - 14;
-            ctx.font = "500 11px JetBrains Mono, ui-monospace, monospace";
-            var pad = 6;
-            var w = ctx.measureText(ev.text).width + pad * 2;
-            ctx.fillStyle = "rgba(9, 13, 26, 0.92)";
-            ctx.strokeStyle = ev.text.indexOf("BLOCKED") >= 0 ? "rgba(245, 158, 11, 0.7)" : "rgba(34, 197, 94, 0.7)";
+            var mx = (a.x + b.x) * 0.5;
+            var my = (a.y + b.y) * 0.5 - (1 - ev.life) * 14;
+
+            ctx.save();
+            ctx.fillStyle = "rgba(21, 27, 29, 0.90)"; // Graphite
+            ctx.strokeStyle = "rgba(52, 58, 59, 0.8)";
             ctx.lineWidth = 1;
-            ctx.beginPath();
-            if (typeof ctx.roundRect === "function") {
-                ctx.roundRect(x - w / 2, y - 14, w, 18, 4);
-            } else {
-                ctx.rect(x - w / 2, y - 14, w, 18);
-            }
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = ev.text.indexOf("BLOCKED") >= 0 ? "#f59e0b" : "#22c55e";
-            ctx.fillText(ev.text, x - w / 2 + pad, y);
-            if (!reduced) ev.life -= 0.004;
+            ctx.font = "10px 'IBM Plex Mono', monospace";
+            var textW = ctx.measureText(ev.text).width;
+            ctx.fillRect(mx - textW / 2 - 6, my - 9, textW + 12, 18);
+            ctx.strokeRect(mx - textW / 2 - 6, my - 9, textW + 12, 18);
+
+            ctx.fillStyle = "#B8F36B";
+            ctx.fillText(ev.text, mx - textW / 2, my + 3);
+            ctx.restore();
+
+            ev.life -= 0.007;
         });
         events = events.filter(function (ev) { return ev.life > 0; });
 
-        if (!reduced) rafId = window.requestAnimationFrame(animate);
+        if (!reduced) {
+            rafId = requestAnimationFrame(drawFrame);
+        }
     }
 
-    function animate(time) {
-        drawFrame(time);
-    }
-
-    canvas.addEventListener("pointermove", function (event) {
+    canvas.addEventListener("mousemove", function (e) {
         var rect = canvas.getBoundingClientRect();
-        mouse.x = event.clientX - rect.left;
-        mouse.y = event.clientY - rect.top;
+        mouse.x = e.clientX - rect.left;
+        mouse.y = e.clientY - rect.top;
     });
-    canvas.addEventListener("pointerleave", function () {
+
+    canvas.addEventListener("mouseleave", function () {
         mouse.x = -9999;
         mouse.y = -9999;
     });
 
-    let resizeTimeout;
-    window.addEventListener("resize", () => {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
-            resizeCanvas();
-            buildGraph();
-            if (reduced) drawFrame(0);
-        }, 150);
-    });
+    window.addEventListener("resize", resize);
 
-    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    motionQuery.addEventListener("change", (e) => {
-        reduced = e.matches;
-        if (reduced) {
-            particles = [];
-            if (rafId) cancelAnimationFrame(rafId);
-            drawFrame(0);
-        } else {
-            initParticles();
-            rafId = requestAnimationFrame(animate);
-        }
-    });
-
-    resize();
-    drawFrame(0);
-    if (!reduced) {
-        window.setInterval(spawnEvent, 4200);
-    }
-
-    // Motion performance: pause animation loop when hero canvas is scrolled offscreen
-    if ("IntersectionObserver" in window) {
-        var canvasObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (!entry.isIntersecting) {
-                    if (rafId) {
-                        cancelAnimationFrame(rafId);
-                        rafId = 0;
-                    }
-                } else if (!reduced && !rafId) {
-                    rafId = requestAnimationFrame(animate);
+    var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+                if (!rafId && !reduced) {
+                    rafId = requestAnimationFrame(drawFrame);
                 }
-            });
-        }, { threshold: 0.05 });
-        canvasObserver.observe(canvas);
-    }
+            } else {
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = 0;
+                }
+            }
+        });
+    }, { threshold: 0.1 });
+
+    observer.observe(canvas);
+    resize();
+    drawFrame(performance.now());
+    setInterval(spawnEvent, 4000);
 })();
