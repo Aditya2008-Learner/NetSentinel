@@ -984,14 +984,13 @@ async def api_telemetry_simulate(scenario: str = Form(...)):
 
 
 def _build_telemetry_series(time_range: str, sim: dict) -> list:
-    """Generate a deterministic, time-seeded telemetry series.
+    """Generate a deterministic, continuously smooth telemetry series.
 
-    The RNG seed is derived from the current UTC minute so values drift
-    smoothly between requests rather than jumping to a fixed sequence.
-    All timestamps are UTC ISO 8601 strings.
+    Uses timestamp-derived deterministic noise to ensure smooth continuous
+    values without any minute-boundary jumps. All timestamps are UTC ISO 8601.
     """
     import math
-    import random
+    import hashlib
 
     _RANGE_CONFIG = {
         "15m": (15, 60),
@@ -1002,22 +1001,28 @@ def _build_telemetry_series(time_range: str, sim: dict) -> list:
     num_points, step = _RANGE_CONFIG.get(time_range, (12, 300))
 
     now_ts = int(datetime.utcnow().timestamp())
-    # Seed changes once per minute so consecutive polls within the same minute
-    # return identical data (no flicker), but the series drifts over time.
-    seed = now_ts // 60
-    rng = random.Random(seed)
+
+    def _continuous_hash_noise(ts: int, channel: int) -> float:
+        """Generate deterministic noise [0..1] from exact timestamp and channel."""
+        seed_str = f"{ts}:{channel}".encode()
+        h = hashlib.sha256(seed_str).hexdigest()
+        return (int(h[:8], 16) % 10000) / 10000.0
 
     series = []
     for i in range(num_points):
         ts = now_ts - ((num_points - 1 - i) * step)
         dt_iso = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # Smooth sinusoidal base with small random jitter.
         phase = (ts / step) * 0.4
-        inbound  = 25.0 + math.sin(phase) * 10.0 + rng.uniform(-2.0, 2.0)
-        outbound = 12.0 + math.cos(phase) * 5.0  + rng.uniform(-1.0, 1.0)
-        pps      = int(700 + math.sin(phase * 0.8) * 200 + rng.uniform(-30, 30))
-        latency  = 18.0 + math.cos(phase * 0.6) * 6.0 + rng.uniform(-1.5, 1.5)
+        noise_inbound = _continuous_hash_noise(ts, 0) * 4.0 - 2.0
+        noise_outbound = _continuous_hash_noise(ts, 1) * 2.0 - 1.0
+        noise_pps = _continuous_hash_noise(ts, 2) * 60.0 - 30.0
+        noise_latency = _continuous_hash_noise(ts, 3) * 3.0 - 1.5
+
+        inbound  = 25.0 + math.sin(phase) * 10.0 + noise_inbound
+        outbound = 12.0 + math.cos(phase) * 5.0  + noise_outbound
+        pps      = int(700 + math.sin(phase * 0.8) * 200 + noise_pps)
+        latency  = 18.0 + math.cos(phase * 0.6) * 6.0 + noise_latency
 
         if sim["active"] and i >= num_points - 4:
             scenario = sim["scenario"]

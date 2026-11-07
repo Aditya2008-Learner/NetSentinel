@@ -421,8 +421,7 @@ async function loadOverviewData() {
 // --- Telemetry Chart & Continuous Evolving Real-Time Motion Loop ---
 let _telemetryAnimFrame = null;
 let _telemetryMaxPoints = 48;
-let _currentDisplayInbound = [];
-let _currentDisplayOutbound = [];
+let _telemetryBuffer = [];
 let _targetInbound = 20;
 let _targetOutbound = 10;
 let _currentDisplayMaxVal = 20;
@@ -442,8 +441,7 @@ function _metricPair(point, metric) {
 }
 
 function initTelemetrySeriesFromData(series, metric) {
-    _currentDisplayInbound = [];
-    _currentDisplayOutbound = [];
+    _telemetryBuffer = [];
     _scrollOffset = 0;
     const pts = series && series.length > 0 ? series : [];
     for (let i = 0; i < _telemetryMaxPoints; i++) {
@@ -454,14 +452,15 @@ function initTelemetrySeriesFromData(series, metric) {
             inVal = pair[0];
             outVal = pair[1];
         }
-        _currentDisplayInbound.push(inVal);
-        _currentDisplayOutbound.push(outVal);
+        _telemetryBuffer.push({ inbound: inVal, outbound: outVal });
     }
     const lastPair = pts.length > 0 ? _metricPair(pts[pts.length - 1], metric) : [20, 10];
     _targetInbound = lastPair[0];
     _targetOutbound = lastPair[1];
     if (pts.length > 0) _latestTelemetryPoint = pts[pts.length - 1];
-    const peak = Math.max(0, ..._currentDisplayInbound, ..._currentDisplayOutbound);
+    const inValues = _telemetryBuffer.map(p => p.inbound);
+    const outValues = _telemetryBuffer.map(p => p.outbound);
+    const peak = Math.max(0, ...inValues, ...outValues);
     const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
     _currentDisplayMaxVal = Math.max(peak * 1.18, floor);
 }
@@ -471,7 +470,6 @@ function updateTelemetrySeriesWithLiveMeasurements(newInbound, newOutbound, poin
     const outbound = Number.isFinite(newOutbound) ? Math.max(0, newOutbound) : 0;
     if (point) _latestTelemetryPoint = point;
 
-    // Set new incoming target values without jumping or resetting ongoing animations
     _targetInbound = inbound;
     _targetOutbound = outbound;
 }
@@ -527,7 +525,6 @@ function renderTelemetryChart() {
         _telemetryAnimFrame = null;
     }
 
-    // Performance: pause animation when canvas is not visible or element is hidden in background tab/view
     if (telemetryPaused || document.hidden || canvas.offsetParent === null) {
         return;
     }
@@ -541,8 +538,7 @@ function renderTelemetryChart() {
         if (latestTelemetryData && latestTelemetryData.series) {
             initTelemetrySeriesFromData(latestTelemetryData.series, metric);
         } else {
-            _currentDisplayInbound = [];
-            _currentDisplayOutbound = [];
+            _telemetryBuffer = [];
         }
     }
 
@@ -563,41 +559,38 @@ function renderTelemetryChart() {
     const dt = Math.min((now - _lastTime) / 1000, 0.1);
     _lastTime = now;
 
-    // Ensure initial buffer is populated
-    if (_currentDisplayInbound.length === 0) {
+    if (_telemetryBuffer.length === 0) {
         initTelemetrySeriesFromData(latestTelemetryData ? latestTelemetryData.series : [], metric);
     }
 
-    // 1. Continuous smooth horizontal movement without sawtooth snapping
     if (!telemetryPaused) {
         _phase += dt * 2.5;
-        // Constant, continuous horizontal velocity
-        const scrollSpeed = 0.5; // step units per second
+        const scrollSpeed = 0.5;
         _scrollOffset += dt * scrollSpeed;
         while (_scrollOffset >= 1.0) {
             _scrollOffset -= 1.0;
-            // Shift points smoothly: oldest leaves left edge, new point enters at right edge
-            _currentDisplayInbound.shift();
-            _currentDisplayOutbound.shift();
-            _currentDisplayInbound.push(_currentDisplayInbound[_currentDisplayInbound.length - 1]);
-            _currentDisplayOutbound.push(_currentDisplayOutbound[_currentDisplayOutbound.length - 1]);
+            if (_telemetryBuffer.length > 0) {
+                _telemetryBuffer.shift();
+                _telemetryBuffer.push({
+                    inbound: _telemetryBuffer[_telemetryBuffer.length - 1].inbound,
+                    outbound: _telemetryBuffer[_telemetryBuffer.length - 1].outbound
+                });
+            }
         }
     }
 
-    // 2. Smoothly ease rightmost arriving edge toward newest received target value
-    const lastIdx = _currentDisplayInbound.length - 1;
+    const lastIdx = _telemetryBuffer.length - 1;
     if (lastIdx >= 0) {
         const lerpFactor = telemetryPaused ? 1.0 : Math.min(1.0 - Math.exp(-dt * 4.5), 0.35);
-        _currentDisplayInbound[lastIdx] += (_targetInbound - _currentDisplayInbound[lastIdx]) * lerpFactor;
-        _currentDisplayOutbound[lastIdx] += (_targetOutbound - _currentDisplayOutbound[lastIdx]) * lerpFactor;
+        _telemetryBuffer[lastIdx].inbound += (_targetInbound - _telemetryBuffer[lastIdx].inbound) * lerpFactor;
+        _telemetryBuffer[lastIdx].outbound += (_targetOutbound - _telemetryBuffer[lastIdx].outbound) * lerpFactor;
     }
 
     _updateTelemetryHeader(metric);
 
-    const inValues = _currentDisplayInbound;
-    const outValues = _currentDisplayOutbound;
+    const inValues = _telemetryBuffer.map(p => p.inbound);
+    const outValues = _telemetryBuffer.map(p => p.outbound);
 
-    // 3. Smooth independent Y-axis autoscaling with spring tracking — zero vertical snapping
     const peak = Math.max(0, ...inValues, ...outValues);
     const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
     const targetMaxVal = Math.max(peak * 1.18, floor);
@@ -607,7 +600,6 @@ function renderTelemetryChart() {
 
     ctx.clearRect(0, 0, width, height);
 
-    // Gridlines with subtle adaptive ticks
     ctx.strokeStyle = "rgba(38, 53, 79, 0.45)";
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
@@ -622,7 +614,6 @@ function renderTelemetryChart() {
     const stepX = width / span;
     const shift = telemetryPaused ? 0 : _scrollOffset * stepX;
 
-    // 4. Inbound Area & Smooth Waveform (Emerald #10b981)
     const inGrad = ctx.createLinearGradient(0, 0, 0, height);
     inGrad.addColorStop(0, "rgba(16, 185, 129, 0.22)");
     inGrad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
@@ -642,7 +633,6 @@ function renderTelemetryChart() {
     _drawSmoothWaveform(ctx, inValues, minVal, maxVal, height, stepX, shift);
     ctx.stroke();
 
-    // 5. Outbound Area & Smooth Waveform (Sky Blue #38bdf8)
     const outGrad = ctx.createLinearGradient(0, 0, 0, height);
     outGrad.addColorStop(0, "rgba(56, 189, 248, 0.16)");
     outGrad.addColorStop(1, "rgba(56, 189, 248, 0.0)");
@@ -662,7 +652,6 @@ function renderTelemetryChart() {
     _drawSmoothWaveform(ctx, outValues, minVal, maxVal, height, stepX, shift);
     ctx.stroke();
 
-    // 6. Glowing radar pulse on arriving edge
     if (inValues.length > 0) {
         const lastIdx = inValues.length - 1;
         const lastX = lastIdx * stepX - shift;
@@ -672,7 +661,6 @@ function renderTelemetryChart() {
         const pulseScale = telemetryPaused ? 1 : (1 + Math.sin(_phase * 4.5) * 0.28);
         const pulseAlpha = telemetryPaused ? 0.35 : (0.35 + Math.sin(_phase * 4.5) * 0.15);
 
-        // Inbound point pulse (radar wave)
         ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
         ctx.arc(lastX, lastInY, 10 * pulseScale, 0, Math.PI * 2);
@@ -687,7 +675,6 @@ function renderTelemetryChart() {
         ctx.arc(lastX, lastInY, 3.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Outbound point dot (radar wave)
         ctx.fillStyle = `rgba(56, 189, 248, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
         ctx.arc(lastX, lastOutY, 8.5 * pulseScale, 0, Math.PI * 2);
