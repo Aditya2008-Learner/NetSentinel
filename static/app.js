@@ -409,14 +409,13 @@ async function loadOverviewData() {
 
 // --- Telemetry Chart & Continuous Evolving Real-Time Motion Loop ---
 let _telemetryAnimFrame = null;
-let _telemetryBufferInbound = [];
-let _telemetryBufferOutbound = [];
 let _telemetryMaxPoints = 48;
 let _currentDisplayInbound = [];
 let _currentDisplayOutbound = [];
+let _targetInbound = 20;
+let _targetOutbound = 10;
 let _currentDisplayMaxVal = 20;
 let _scrollOffset = 0;
-let _lastSampleAt = 0;
 let _lastTime = performance.now();
 let _phase = 0;
 let _latestTelemetryPoint = null;
@@ -431,38 +430,39 @@ function _metricPair(point, metric) {
     return [point.inbound_mbps || 0, point.outbound_mbps || 0];
 }
 
+function initTelemetrySeriesFromData(series, metric) {
+    _currentDisplayInbound = [];
+    _currentDisplayOutbound = [];
+    _scrollOffset = 0;
+    const pts = series && series.length > 0 ? series : [];
+    for (let i = 0; i < _telemetryMaxPoints; i++) {
+        let inVal = 20, outVal = 10;
+        if (pts.length > 0) {
+            const srcIdx = Math.floor((i / _telemetryMaxPoints) * pts.length);
+            const pair = _metricPair(pts[srcIdx], metric);
+            inVal = pair[0];
+            outVal = pair[1];
+        }
+        _currentDisplayInbound.push(inVal);
+        _currentDisplayOutbound.push(outVal);
+    }
+    const lastPair = pts.length > 0 ? _metricPair(pts[pts.length - 1], metric) : [20, 10];
+    _targetInbound = lastPair[0];
+    _targetOutbound = lastPair[1];
+    if (pts.length > 0) _latestTelemetryPoint = pts[pts.length - 1];
+    const peak = Math.max(0, ..._currentDisplayInbound, ..._currentDisplayOutbound);
+    const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
+    _currentDisplayMaxVal = Math.max(peak * 1.18, floor);
+}
+
 function updateTelemetrySeriesWithLiveMeasurements(newInbound, newOutbound, point) {
     const inbound = Number.isFinite(newInbound) ? Math.max(0, newInbound) : 0;
     const outbound = Number.isFinite(newOutbound) ? Math.max(0, newOutbound) : 0;
     if (point) _latestTelemetryPoint = point;
-    _lastSampleAt = performance.now();
 
-    if (_telemetryBufferInbound.length === 0) {
-        for (let i = 0; i < _telemetryMaxPoints; i++) {
-            const t = i / _telemetryMaxPoints;
-            const seedIn = Math.max(0.4, inbound * (0.55 + t * 0.45) + Math.sin(i * 0.55) * inbound * 0.08);
-            const seedOut = Math.max(0.2, outbound * (0.45 + t * 0.55) + Math.cos(i * 0.37) * outbound * 0.1);
-            _telemetryBufferInbound.push(seedIn);
-            _telemetryBufferOutbound.push(seedOut);
-            _currentDisplayInbound.push(seedIn);
-            _currentDisplayOutbound.push(seedOut);
-        }
-        return;
-    }
-
-    // Append incoming sample
-    _telemetryBufferInbound.push(inbound);
-    _telemetryBufferOutbound.push(outbound);
-
-    // Roll oldest points off the left edge only when buffer exceeds capacity
-    if (_telemetryBufferInbound.length > _telemetryMaxPoints) {
-        _telemetryBufferInbound.shift();
-        _telemetryBufferOutbound.shift();
-        if (_currentDisplayInbound.length > _telemetryMaxPoints) {
-            _currentDisplayInbound.shift();
-            _currentDisplayOutbound.shift();
-        }
-    }
+    // Set new incoming target values without jumping or resetting ongoing animations
+    _targetInbound = inbound;
+    _targetOutbound = outbound;
 }
 
 function _updateTelemetryHeader(metric) {
@@ -527,17 +527,11 @@ function renderTelemetryChart() {
     if (_telemetryMetricDirty || metric !== _activeTelemetryMetric) {
         _telemetryMetricDirty = false;
         _activeTelemetryMetric = metric;
-        _telemetryBufferInbound = [];
-        _telemetryBufferOutbound = [];
-        _currentDisplayInbound = [];
-        _currentDisplayOutbound = [];
-        _scrollOffset = 0;
-        if (_latestTelemetryPoint) {
-            const pair = _metricPair(_latestTelemetryPoint, metric);
-            updateTelemetrySeriesWithLiveMeasurements(pair[0], pair[1], _latestTelemetryPoint);
-            const peak = Math.max(pair[0], pair[1]);
-            const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
-            _currentDisplayMaxVal = Math.max(peak * 1.18, floor);
+        if (latestTelemetryData && latestTelemetryData.series) {
+            initTelemetrySeriesFromData(latestTelemetryData.series, metric);
+        } else {
+            _currentDisplayInbound = [];
+            _currentDisplayOutbound = [];
         }
     }
 
@@ -558,33 +552,33 @@ function renderTelemetryChart() {
     const dt = Math.min((now - _lastTime) / 1000, 0.1);
     _lastTime = now;
 
+    // Ensure initial buffer is populated
+    if (_currentDisplayInbound.length === 0) {
+        initTelemetrySeriesFromData(latestTelemetryData ? latestTelemetryData.series : [], metric);
+    }
+
+    // 1. Continuous smooth horizontal movement without sawtooth snapping
     if (!telemetryPaused) {
         _phase += dt * 2.5;
-        // Continuous temporal evolution between incoming polls
-        const sinceSample = _lastSampleAt ? (now - _lastSampleAt) / 1000 : 1;
-        _scrollOffset = Math.min(sinceSample / 2.5, 0.95);
+        // Constant, continuous horizontal velocity
+        const scrollSpeed = 0.5; // step units per second
+        _scrollOffset += dt * scrollSpeed;
+        while (_scrollOffset >= 1.0) {
+            _scrollOffset -= 1.0;
+            // Shift points smoothly: oldest leaves left edge, new point enters at right edge
+            _currentDisplayInbound.shift();
+            _currentDisplayOutbound.shift();
+            _currentDisplayInbound.push(_currentDisplayInbound[_currentDisplayInbound.length - 1]);
+            _currentDisplayOutbound.push(_currentDisplayOutbound[_currentDisplayOutbound.length - 1]);
+        }
     }
 
-    while (_currentDisplayInbound.length < _telemetryBufferInbound.length) {
-        const idx = _currentDisplayInbound.length;
-        _currentDisplayInbound.push(_telemetryBufferInbound[idx] || 0);
-        _currentDisplayOutbound.push(_telemetryBufferOutbound[idx] || 0);
-    }
-    if (_currentDisplayInbound.length > _telemetryBufferInbound.length) {
-        _currentDisplayInbound.length = _telemetryBufferInbound.length;
-        _currentDisplayOutbound.length = _telemetryBufferOutbound.length;
-    }
-
-    // Spring interpolation: smoothly ease displayed curve towards target measurements
-    const springLerp = telemetryPaused ? 1 : Math.min(1 - Math.exp(-dt * 6.5), 0.35);
-    for (let i = 0; i < _telemetryBufferInbound.length; i++) {
-        const edge = i / Math.max(_telemetryBufferInbound.length - 1, 1);
-        const targetIn = _telemetryBufferInbound[i];
-        const targetOut = _telemetryBufferOutbound[i];
-        const microIn = Math.sin(_phase * 1.15 + i * 0.62) * targetIn * (0.012 + edge * 0.026);
-        const microOut = Math.cos(_phase * 0.86 + i * 0.41) * targetOut * (0.015 + (1 - edge) * 0.025);
-        _currentDisplayInbound[i] += ((targetIn + microIn) - _currentDisplayInbound[i]) * springLerp;
-        _currentDisplayOutbound[i] += ((targetOut + microOut) - _currentDisplayOutbound[i]) * springLerp;
+    // 2. Smoothly ease rightmost arriving edge toward newest received target value
+    const lastIdx = _currentDisplayInbound.length - 1;
+    if (lastIdx >= 0) {
+        const lerpFactor = telemetryPaused ? 1.0 : Math.min(1.0 - Math.exp(-dt * 4.5), 0.35);
+        _currentDisplayInbound[lastIdx] += (_targetInbound - _currentDisplayInbound[lastIdx]) * lerpFactor;
+        _currentDisplayOutbound[lastIdx] += (_targetOutbound - _currentDisplayOutbound[lastIdx]) * lerpFactor;
     }
 
     _updateTelemetryHeader(metric);
@@ -592,11 +586,11 @@ function renderTelemetryChart() {
     const inValues = _currentDisplayInbound;
     const outValues = _currentDisplayOutbound;
 
-    // Smooth adaptive Y-axis range with spring tracking — zero vertical snapping
+    // 3. Smooth independent Y-axis autoscaling with spring tracking — zero vertical snapping
     const peak = Math.max(0, ...inValues, ...outValues);
     const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
     const targetMaxVal = Math.max(peak * 1.18, floor);
-    _currentDisplayMaxVal += (targetMaxVal - _currentDisplayMaxVal) * (1 - Math.exp(-dt * 4.5));
+    _currentDisplayMaxVal += (targetMaxVal - _currentDisplayMaxVal) * (1 - Math.exp(-dt * 3.5));
     const maxVal = Math.max(_currentDisplayMaxVal, floor);
     const minVal = 0;
 
@@ -617,7 +611,7 @@ function renderTelemetryChart() {
     const stepX = width / span;
     const shift = telemetryPaused ? 0 : _scrollOffset * stepX;
 
-    // 1. Inbound Area & Smooth Waveform (Emerald #10b981)
+    // 4. Inbound Area & Smooth Waveform (Emerald #10b981)
     const inGrad = ctx.createLinearGradient(0, 0, 0, height);
     inGrad.addColorStop(0, "rgba(16, 185, 129, 0.22)");
     inGrad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
@@ -637,7 +631,7 @@ function renderTelemetryChart() {
     _drawSmoothWaveform(ctx, inValues, minVal, maxVal, height, stepX, shift);
     ctx.stroke();
 
-    // 2. Outbound Area & Smooth Waveform (Sky Blue #38bdf8)
+    // 5. Outbound Area & Smooth Waveform (Sky Blue #38bdf8)
     const outGrad = ctx.createLinearGradient(0, 0, 0, height);
     outGrad.addColorStop(0, "rgba(56, 189, 248, 0.16)");
     outGrad.addColorStop(1, "rgba(56, 189, 248, 0.0)");
@@ -657,26 +651,25 @@ function renderTelemetryChart() {
     _drawSmoothWaveform(ctx, outValues, minVal, maxVal, height, stepX, shift);
     ctx.stroke();
 
-    // Glowing real-time pulse dots on arriving edge with harmonic breathing wave
+    // 6. Glowing radar pulse on arriving edge
     if (inValues.length > 0) {
         const lastIdx = inValues.length - 1;
         const lastX = lastIdx * stepX - shift;
         const lastInY = height - ((inValues[lastIdx] - minVal) / (maxVal - minVal)) * (height - 30) - 15;
         const lastOutY = height - ((outValues[lastIdx] - minVal) / (maxVal - minVal)) * (height - 30) - 15;
 
-        // Breathing spring wave parameters for arriving packet pulse
-        const pulseScale = telemetryPaused ? 1 : (1 + Math.sin(_phase * 4.5) * 0.32);
-        const pulseAlpha = telemetryPaused ? 0.35 : (0.35 + Math.sin(_phase * 4.5) * 0.16);
+        const pulseScale = telemetryPaused ? 1 : (1 + Math.sin(_phase * 4.5) * 0.28);
+        const pulseAlpha = telemetryPaused ? 0.35 : (0.35 + Math.sin(_phase * 4.5) * 0.15);
 
         // Inbound point pulse (radar wave)
         ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastInY, 11 * pulseScale, 0, Math.PI * 2);
+        ctx.arc(lastX, lastInY, 10 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastInY, 6.5 * pulseScale, 0, Math.PI * 2);
+        ctx.arc(lastX, lastInY, 6 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = "#10b981";
         ctx.beginPath();
@@ -686,12 +679,12 @@ function renderTelemetryChart() {
         // Outbound point dot (radar wave)
         ctx.fillStyle = `rgba(56, 189, 248, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastOutY, 9.5 * pulseScale, 0, Math.PI * 2);
+        ctx.arc(lastX, lastOutY, 8.5 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = `rgba(56, 189, 248, ${pulseAlpha})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastOutY, 5.5 * pulseScale, 0, Math.PI * 2);
+        ctx.arc(lastX, lastOutY, 5 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = "#38bdf8";
         ctx.beginPath();
@@ -829,13 +822,17 @@ async function loadTelemetryGraph() {
         _updateBanner(data);
         _updateLastUpdated(true);
 
-        // Feed newest telemetry measurement into rolling continuous buffer
+        // Feed telemetry measurements into continuous streaming buffer
         if (data.series.length > 0) {
-            const latestPoint = data.series[data.series.length - 1];
             const metricElem = document.getElementById("telemetry-metric");
             const metric = metricElem ? metricElem.value : "bandwidth";
-            const pair = _metricPair(latestPoint, metric);
-            updateTelemetrySeriesWithLiveMeasurements(pair[0], pair[1], latestPoint);
+            if (_currentDisplayInbound.length === 0) {
+                initTelemetrySeriesFromData(data.series, metric);
+            } else {
+                const latestPoint = data.series[data.series.length - 1];
+                const pair = _metricPair(latestPoint, metric);
+                updateTelemetrySeriesWithLiveMeasurements(pair[0], pair[1], latestPoint);
+            }
         }
 
         renderTelemetryChart();
