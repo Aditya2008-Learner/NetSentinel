@@ -4,35 +4,38 @@
  */
 
 :root {
-    /* Color Palette (Dark Mode First / Void Foundations) */
-    --obsidian: #0A0A0C;          /* Background Canvas */
-    --graphite: #121316;          /* Container / Card Surface */
-    --graphite-light: #1A1C23;    /* Active / Hover State */
-    --graphite-surface: #121316;
-    --signal-lime: #06B6D4;       /* Intelligence Cyan (Primary Accent) */
-    --signal-lime-dim: rgba(6, 182, 212, 0.12);
-    --signal-lime-border: rgba(6, 182, 212, 0.25);
-    --intel-cyan: #06B6D4;
-    --signal-green: #10B981;      /* Signal Green */
-    --evidence-white: #F8FAFC;    /* Primary Text (Alabaster) */
-    --muted-grey: #94A3B8;        /* Secondary Text (Muted Slate) */
-    --border-grey: rgba(255, 255, 255, 0.10); /* 1px fine borders */
-    --border-subtle: rgba(255, 255, 255, 0.07);
-    --threat-coral: #EF4444;      /* Critical Red */
-    --threat-coral-dim: rgba(239, 68, 68, 0.15);
-    --warning-amber: #F59E0B;     /* Alert Amber */
-    --warning-amber-dim: rgba(245, 158, 11, 0.15);
+    /* Color Palette (Precision Dark SOC Mode) */
+    --obsidian: #090A0C;          /* Main background */
+    --secondary-bg: #101216;      /* Secondary background */
+    --graphite: #15191F;          /* Elevated surfaces */
+    --graphite-light: #1D232C;    /* Active / hover state */
+    --graphite-surface: #15191F;
+    --signal-lime: #B7F36B;       /* Primary accent */
+    --signal-lime-dim: rgba(183, 243, 107, 0.12);
+    --signal-lime-border: rgba(183, 243, 107, 0.3);
+    --primary-accent: #B7F36B;
+    --success-green: #75D69B;     /* Success */
+    --evidence-white: #F1F3F5;    /* Primary text */
+    --muted-grey: #929AA5;        /* Secondary text */
+    --text-muted: #626B76;        /* Muted text */
+    --border-grey: #252A32;       /* Borders */
+    --border-subtle: #1C2026;
+    --threat-coral: #EF6B70;      /* Critical */
+    --threat-coral-dim: rgba(239, 107, 112, 0.14);
+    --warning-amber: #E9B65B;     /* Warning */
+    --warning-amber-dim: rgba(233, 182, 91, 0.12);
+    --info-cyan: #82A8C8;         /* Informational */
 
-    --font-headline: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-headline: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-    /* Micro radii / Crisp 90-degree corners */
-    --radius-sm: 2px;
-    --radius-md: 2px;
-    --radius-lg: 2px;
+    /* Controlled Geometry */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
 
-    --header-h: 70px;
+    --header-h: 68px;
     --max-w: 1200px;
 }
 

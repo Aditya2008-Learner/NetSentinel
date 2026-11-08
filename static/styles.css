@@ -3,92 +3,97 @@
    Design System Tokens & Workspace Styling
    ========================================================================== */
 
+/* ==========================================================================
+   Net Sentinel — Enterprise Cybersecurity & Digital Forensics Platform
+   Art Direction: Tactical Intelligence × Precision Engineering × Enterprise SOC
+   ========================================================================== */
+
 :root {
-    /* Color Palette (Dark Mode First / Void Foundations) */
-    --bg-canvas: #0A0A0C;
-    --bg-surface-base: #0A0A0C;
-    --bg-surface-elevated: #121316;
-    --bg-surface-active: #1A1C23;
-    --bg-surface-inset: #0E0F12;
-    --bg-sidebar: #0E0F12;
-    --bg-topbar: #0E0F12;
-
-    /* Intelligence Cyan (Primary Accent) */
-    --intel-cyan: #06B6D4;
-    --intel-cyan-dim: rgba(6, 182, 212, 0.12);
-    --intel-cyan-border: rgba(6, 182, 212, 0.25);
-
-    /* Signal Green (Success / Verified) */
-    --signal-green: #10B981;
-    --signal-green-dim: rgba(16, 185, 129, 0.12);
-    --signal-green-border: rgba(16, 185, 129, 0.25);
-
-    /* Alert Amber (Warning / Heuristic) */
-    --alert-amber: #F59E0B;
-    --alert-amber-dim: rgba(245, 158, 11, 0.12);
-    --alert-amber-border: rgba(245, 158, 11, 0.25);
-
-    /* Critical Red (Breach / Port Scan) */
-    --critical-red: #EF4444;
-    --critical-red-dim: rgba(239, 68, 68, 0.15);
-    --critical-red-border: rgba(239, 68, 68, 0.3);
+    /* Color Palette (Precision Dark Mode) */
+    --bg-canvas: #090A0C;          /* Main background */
+    --bg-secondary: #101216;       /* Secondary background */
+    --bg-surface-base: #090A0C;
+    --bg-surface-elevated: #15191F;/* Elevated surfaces */
+    --bg-surface-active: #1D232C;  /* Active/hover surface */
+    --bg-surface-inset: #0C0E11;   /* Inset well / terminal inputs */
+    --bg-sidebar: #0C0E11;         /* Command rail sidebar */
+    --bg-topbar: #0C0E11;          /* Top bar */
 
     /* Typography & Text */
-    --text-primary: #F8FAFC;      /* Alabaster */
-    --text-secondary: #94A3B8;    /* Muted Slate */
-    --text-muted: #64748B;
-    --text-inverse: #0A0A0C;
+    --text-primary: #F1F3F5;       /* Primary text */
+    --text-secondary: #929AA5;     /* Secondary text */
+    --text-muted: #626B76;         /* Muted text */
+    --text-inverse: #090A0C;
 
-    /* Tactical Reticle Borders & Grid Lines */
-    --border-subtle: rgba(255, 255, 255, 0.07);
-    --border-default: rgba(255, 255, 255, 0.10);
-    --border-hover: rgba(6, 182, 212, 0.4);
-    --border-active: #06B6D4;
-    --border-focus: rgba(6, 182, 212, 0.5);
+    /* Borders */
+    --border-subtle: #1C2026;
+    --border-default: #252A32;     /* Borders */
+    --border-hover: #363D47;
+    --border-active: #B7F36B;
+    --border-focus: rgba(183, 243, 107, 0.45);
     --border-color: var(--border-default);
 
-    /* Semantic Aliases */
-    --accent-emerald: var(--intel-cyan);
-    --accent-emerald-hover: #22d3ee;
-    --accent-emerald-subtle: var(--intel-cyan-dim);
-    --accent-emerald-border: var(--intel-cyan-border);
+    /* Tactical Semantic Accents */
+    --primary-accent: #B7F36B;     /* Primary accent lime */
+    --primary-accent-dim: rgba(183, 243, 107, 0.12);
+    --primary-accent-border: rgba(183, 243, 107, 0.3);
 
-    --accent-amber: var(--alert-amber);
-    --accent-amber-subtle: var(--alert-amber-dim);
-    --accent-amber-border: var(--alert-amber-border);
+    --success: #75D69B;            /* Success */
+    --success-dim: rgba(117, 214, 155, 0.12);
+    --success-border: rgba(117, 214, 155, 0.3);
 
-    --accent-rose: var(--critical-red);
-    --accent-rose-subtle: var(--critical-red-dim);
-    --accent-rose-border: var(--critical-red-border);
+    --warning: #E9B65B;            /* Warning */
+    --warning-dim: rgba(233, 182, 91, 0.12);
+    --warning-border: rgba(233, 182, 91, 0.3);
 
-    --accent-sky: var(--intel-cyan);
-    --accent-sky-subtle: var(--intel-cyan-dim);
-    --accent-sky-border: var(--intel-cyan-border);
+    --critical: #EF6B70;           /* Critical */
+    --critical-dim: rgba(239, 107, 112, 0.14);
+    --critical-border: rgba(239, 107, 112, 0.3);
 
-    --success: var(--signal-green);
-    --danger: var(--critical-red);
-    --warning: var(--alert-amber);
+    --info: #82A8C8;               /* Informational */
+    --info-dim: rgba(130, 168, 200, 0.12);
+    --info-border: rgba(130, 168, 200, 0.3);
 
-    /* Typography Families */
-    --font-headline: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+    /* Legacy compatibility aliases mapped strictly to palette */
+    --accent-emerald: var(--primary-accent);
+    --accent-emerald-hover: #cbf58b;
+    --accent-emerald-subtle: var(--primary-accent-dim);
+    --accent-emerald-border: var(--primary-accent-border);
 
-    /* Micro radii / Crisp 90-degree corners */
-    --radius-sm: 2px;
-    --radius-md: 2px;
-    --radius-lg: 2px;
-    --radius-pill: 2px;
+    --accent-amber: var(--warning);
+    --accent-amber-subtle: var(--warning-dim);
+    --accent-amber-border: var(--warning-border);
 
-    /* Shadows & Transitions */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-    --shadow-card: 0 4px 14px -2px rgba(0, 0, 0, 0.6);
-    --shadow-panel: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
-    --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.95);
+    --accent-rose: var(--critical);
+    --accent-rose-subtle: var(--critical-dim);
+    --accent-rose-border: var(--critical-border);
 
-    /* Mechanical, Deterministic Transitions */
-    --transition-fast: 0.15s linear;
-    --transition-smooth: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    --accent-sky: var(--info);
+    --accent-sky-subtle: var(--info-dim);
+    --accent-sky-border: var(--info-border);
+
+    --danger: var(--critical);
+
+    /* Typography */
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-headline: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+    /* Controlled Geometry */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-pill: 999px;
+
+    /* Restrained Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+    --shadow-panel: 0 8px 24px -4px rgba(0, 0, 0, 0.6);
+    --shadow-modal: 0 20px 48px -8px rgba(0, 0, 0, 0.85);
+
+    /* 150-250ms Transitions */
+    --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-smooth: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ==========================================================================
@@ -113,19 +118,21 @@ body {
 
 h1, h2, h3, h4, .brand-text h2, .section-header h2 {
     font-family: var(--font-headline);
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: -0.02em;
-    color: var(--evidence-white);
+    color: var(--text-primary);
 }
 
-code, pre, .hash-text, .ip-text, td code, .breadcrumb, .system-status, .brand-text span, .metric-label, .time-axis-labels {
+code, pre, .hash-text, .ip-text, td code, .breadcrumb, .system-status, .brand-text span, .metric-label, .time-axis-labels, .telemetry-select, [data-mono] {
     font-family: var(--font-mono);
     font-size: 0.82rem;
     background: var(--bg-surface-inset);
     color: var(--text-primary);
     padding: 2px 6px;
     border-radius: var(--radius-sm);
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border-default);
+    font-variant-numeric: tabular-nums;
+}
     font-variant-numeric: tabular-nums;
 }
 
@@ -226,14 +233,14 @@ code, pre, .hash-text, .ip-text, td code, .breadcrumb, .system-status, .brand-te
 }
 
 .nav-item.active {
-    background: linear-gradient(90deg, rgba(6, 182, 212, 0.14) 0%, rgba(6, 182, 212, 0.02) 100%);
+    background: rgba(183, 243, 107, 0.08);
     color: var(--text-primary);
-    border-left-color: var(--intel-cyan);
+    border-left: 2px solid var(--primary-accent);
     font-weight: 600;
 }
 
 .nav-item.active i {
-    color: var(--intel-cyan);
+    color: var(--primary-accent);
 }
 
 .sidebar-footer {
@@ -803,20 +810,19 @@ code, pre, .hash-text, .ip-text, td code, .breadcrumb, .system-status, .brand-te
 }
 
 .btn-primary {
-    background-color: var(--accent-emerald);
+    background-color: var(--primary-accent);
     color: var(--text-inverse);
-    border-color: var(--accent-emerald);
-    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
+    border-color: var(--primary-accent);
+    font-weight: 600;
 }
 
 .btn-primary:hover {
-    background-color: var(--accent-emerald-hover);
-    border-color: var(--accent-emerald-hover);
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+    background-color: #cbf58b;
+    border-color: #cbf58b;
 }
 
 .btn-secondary {
-    background-color: var(--bg-surface-inset);
+    background-color: var(--bg-surface-elevated);
     border-color: var(--border-default);
     color: var(--text-primary);
 }
@@ -827,14 +833,13 @@ code, pre, .hash-text, .ip-text, td code, .breadcrumb, .system-status, .brand-te
 }
 
 .btn-danger {
-    background-color: var(--accent-rose);
+    background-color: var(--critical);
     color: #ffffff;
-    border-color: var(--accent-rose);
+    border-color: var(--critical);
 }
 
 .btn-danger:hover {
-    background-color: #e11d48;
-    box-shadow: 0 4px 12px rgba(244, 63, 94, 0.35);
+    background-color: #e25b60;
 }
 
 .btn-sm {
@@ -912,13 +917,13 @@ tr:hover td {
     gap: 4px;
 }
 
-.badge-success { background-color: var(--accent-emerald-subtle); color: #34d399; border: 1px solid var(--accent-emerald-border); }
-.badge-warning { background-color: var(--accent-amber-subtle); color: #fbbf24; border: 1px solid var(--accent-amber-border); }
-.badge-danger { background-color: var(--accent-rose-subtle); color: #fb7185; border: 1px solid var(--accent-rose-border); }
-.badge-info { background-color: var(--accent-sky-subtle); color: #67e8f9; border: 1px solid var(--accent-sky-border); }
-.badge-high { background-color: var(--accent-rose-subtle); color: #fb7185; border: 1px solid var(--accent-rose-border); }
-.badge-medium { background-color: var(--accent-amber-subtle); color: #fbbf24; border: 1px solid var(--accent-amber-border); }
-.badge-low { background-color: var(--accent-emerald-subtle); color: #34d399; border: 1px solid var(--accent-emerald-border); }
+.badge-success { background-color: var(--success-dim); color: var(--success); border: 1px solid var(--success-border); }
+.badge-warning { background-color: var(--warning-dim); color: var(--warning); border: 1px solid var(--warning-border); }
+.badge-danger { background-color: var(--critical-dim); color: var(--critical); border: 1px solid var(--critical-border); }
+.badge-info { background-color: var(--info-dim); color: var(--info); border: 1px solid var(--info-border); }
+.badge-high { background-color: var(--critical-dim); color: var(--critical); border: 1px solid var(--critical-border); }
+.badge-medium { background-color: var(--warning-dim); color: var(--warning); border: 1px solid var(--warning-border); }
+.badge-low { background-color: var(--success-dim); color: var(--success); border: 1px solid var(--success-border); }
 
 /* ==========================================================================
    Forms, File Upload Drop Zone & Inputs

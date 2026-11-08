@@ -339,7 +339,7 @@ function renderLiveProtocolDonut(protocols) {
     const totalFlows = protocols.reduce((acc, p) => acc + (p.count || 0), 0);
     if (totalEl) _animateNumberCounter(totalEl, totalFlows);
 
-    const colors = ["#06B6D4", "#38bdf8", "#f59e0b", "#FF6B57", "#8b5cf6"];
+    const colors = ["#B7F36B", "#82A8C8", "#75D69B", "#E9B65B", "#EF6B70"];
     const radius = 38;
     const circumference = 2 * Math.PI * radius; // ~238.76
 
@@ -615,8 +615,8 @@ function renderTelemetryChart() {
     const shift = telemetryPaused ? 0 : _scrollOffset * stepX;
 
     const inGrad = ctx.createLinearGradient(0, 0, 0, height);
-    inGrad.addColorStop(0, "rgba(6, 182, 212, 0.22)");
-    inGrad.addColorStop(1, "rgba(6, 182, 212, 0.0)");
+    inGrad.addColorStop(0, "rgba(183, 243, 107, 0.22)");
+    inGrad.addColorStop(1, "rgba(183, 243, 107, 0.0)");
     ctx.fillStyle = inGrad;
     ctx.beginPath();
     ctx.moveTo(0, height);
@@ -625,8 +625,8 @@ function renderTelemetryChart() {
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = "#06B6D4";
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = "#B7F36B";
+    ctx.lineWidth = 2.0;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -634,8 +634,8 @@ function renderTelemetryChart() {
     ctx.stroke();
 
     const outGrad = ctx.createLinearGradient(0, 0, 0, height);
-    outGrad.addColorStop(0, "rgba(16, 185, 129, 0.18)");
-    outGrad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
+    outGrad.addColorStop(0, "rgba(130, 168, 200, 0.18)");
+    outGrad.addColorStop(1, "rgba(130, 168, 200, 0.0)");
     ctx.fillStyle = outGrad;
     ctx.beginPath();
     ctx.moveTo(0, height);
@@ -644,8 +644,8 @@ function renderTelemetryChart() {
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = "#10B981";
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = "#82A8C8";
+    ctx.lineWidth = 1.6;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -661,32 +661,32 @@ function renderTelemetryChart() {
         const pulseScale = telemetryPaused ? 1 : (1 + Math.sin(_phase * 4.5) * 0.28);
         const pulseAlpha = telemetryPaused ? 0.35 : (0.35 + Math.sin(_phase * 4.5) * 0.15);
 
-        ctx.fillStyle = `rgba(6, 182, 212, ${pulseAlpha * 0.45})`;
+        ctx.fillStyle = `rgba(183, 243, 107, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastInY, 10 * pulseScale, 0, Math.PI * 2);
+        ctx.arc(lastX, lastInY, 9 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(6, 182, 212, ${pulseAlpha})`;
+        ctx.fillStyle = `rgba(183, 243, 107, ${pulseAlpha})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastInY, 6 * pulseScale, 0, Math.PI * 2);
+        ctx.arc(lastX, lastInY, 5.5 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#06B6D4";
+        ctx.fillStyle = "#B7F36B";
         ctx.beginPath();
-        ctx.arc(lastX, lastInY, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha * 0.45})`;
-        ctx.beginPath();
-        ctx.arc(lastX, lastOutY, 8.5 * pulseScale, 0, Math.PI * 2);
+        ctx.arc(lastX, lastInY, 3.0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(16, 185, 129, ${pulseAlpha})`;
+        ctx.fillStyle = `rgba(130, 168, 200, ${pulseAlpha * 0.45})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastOutY, 5 * pulseScale, 0, Math.PI * 2);
+        ctx.arc(lastX, lastOutY, 8 * pulseScale, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#10B981";
+
+        ctx.fillStyle = `rgba(130, 168, 200, ${pulseAlpha})`;
         ctx.beginPath();
-        ctx.arc(lastX, lastOutY, 3.0, 0, Math.PI * 2);
+        ctx.arc(lastX, lastOutY, 4.5 * pulseScale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#82A8C8";
+        ctx.beginPath();
+        ctx.arc(lastX, lastOutY, 2.8, 0, Math.PI * 2);
         ctx.fill();
     }
 
@@ -1059,18 +1059,18 @@ async function loadNetworkResults(data) {
 
         threatBarsContainer.innerHTML = `
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
-                <span style="font-size: 0.75rem; font-weight: 700; color: #FF6B57; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) both;">${highSev}</span>
-                <div class="mini-bar-anim" style="width: 100%; height: ${highH}%; background: linear-gradient(180deg, #FF6B57 0%, rgba(255, 107, 87, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) both;"></div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: #EF6B70; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) both;">${highSev}</span>
+                <div class="mini-bar-anim" style="width: 100%; height: ${highH}%; background: linear-gradient(180deg, #EF6B70 0%, rgba(239, 107, 112, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) both;"></div>
                 <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">High</span>
             </div>
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
-                <span style="font-size: 0.75rem; font-weight: 700; color: #f59e0b; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) 100ms both;">${mediumSev}</span>
-                <div class="mini-bar-anim" style="width: 100%; height: ${medH}%; background: linear-gradient(180deg, #f59e0b 0%, rgba(245, 158, 11, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) 100ms both;"></div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: #E9B65B; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) 100ms both;">${mediumSev}</span>
+                <div class="mini-bar-anim" style="width: 100%; height: ${medH}%; background: linear-gradient(180deg, #E9B65B 0%, rgba(233, 182, 91, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) 100ms both;"></div>
                 <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Medium</span>
             </div>
             <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end;">
-                <span style="font-size: 0.75rem; font-weight: 700; color: #06B6D4; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) 200ms both;">${lowSev}</span>
-                <div class="mini-bar-anim" style="width: 100%; height: ${lowH}%; background: linear-gradient(180deg, #06B6D4 0%, rgba(6, 182, 212, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) 200ms both;"></div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: #75D69B; font-family: 'JetBrains Mono', monospace; animation: badgePop 0.4s var(--ease-spring-bouncy) 200ms both;">${lowSev}</span>
+                <div class="mini-bar-anim" style="width: 100%; height: ${lowH}%; background: linear-gradient(180deg, #75D69B 0%, rgba(117, 214, 155, 0.4) 100%); border-radius: 4px; animation: barRise 0.5s var(--ease-spring-bouncy) 200ms both;"></div>
                 <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Low</span>
             </div>
         `;
@@ -2405,7 +2405,7 @@ function renderAnalyticsUI(data) {
         m_tp_pill.innerHTML = `<i class="fa-solid fa-arrow-trend-${m.throughput.change_pct >= 0 ? 'up' : 'down'} text-[9px]"></i> ${sign}${m.throughput.change_pct}%`;
         m_tp_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.throughput.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
     }
-    renderMiniBars("m-tp-chart", m.throughput.bars, m.throughput.favorable ? "#06B6D4" : "#FF6B57");
+    renderMiniBars("m-tp-chart", m.throughput.bars, m.throughput.favorable ? "#B7F36B" : "#EF6B70");
 
     // 3. Metric 2: Threat Events
     const m_threat_val = document.getElementById("m-threat-val");
@@ -2416,7 +2416,7 @@ function renderAnalyticsUI(data) {
         m_threat_pill.innerHTML = `<i class="fa-solid fa-arrow-trend-${m.threats.change_pct >= 0 ? 'up' : 'down'} text-[9px]"></i> ${sign}${m.threats.change_pct}%`;
         m_threat_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.threats.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
     }
-    renderMiniBars("m-threat-chart", m.threats.bars, m.threats.favorable ? "#38bdf8" : "#FF6B57");
+    renderMiniBars("m-threat-chart", m.threats.bars, m.threats.favorable ? "#82A8C8" : "#EF6B70");
 
     // 4. Metric 3: Active Hosts
     const m_hosts_val = document.getElementById("m-hosts-val");
@@ -2427,7 +2427,7 @@ function renderAnalyticsUI(data) {
         m_hosts_pill.innerHTML = `<i class="fa-solid fa-arrow-${m.hosts.change_abs >= 0 ? 'up' : 'down'} text-[9px]"></i> ${sign}${m.hosts.change_abs} hosts`;
         m_hosts_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.hosts.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
     }
-    renderMiniBars("m-hosts-chart", m.hosts.bars, "#38bdf8");
+    renderMiniBars("m-hosts-chart", m.hosts.bars, "#82A8C8");
 
     // 5. Metric 4: Average Latency
     const m_lat_val = document.getElementById("m-lat-val");
@@ -2438,7 +2438,7 @@ function renderAnalyticsUI(data) {
         m_lat_pill.innerHTML = `<i class="fa-solid fa-arrow-${m.latency.change_diff <= 0 ? 'down' : 'up'} text-[9px]"></i> ${sign}${m.latency.change_diff} ms`;
         m_lat_pill.className = `inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono ${m.latency.favorable ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`;
     }
-    renderMiniBars("m-lat-chart", m.latency.bars, m.latency.favorable ? "#06B6D4" : "#f59e0b");
+    renderMiniBars("m-lat-chart", m.latency.bars, m.latency.favorable ? "#B7F36B" : "#E9B65B");
 
     // 6. Main Telemetry SVG Area Chart
     renderAnalyticsSvgChart(data.chart_series);
@@ -2516,31 +2516,31 @@ function renderAnalyticsSvgChart(series) {
     svg.innerHTML = `
         <defs>
             <linearGradient id="inboundGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.25"/>
-                <stop offset="100%" stop-color="#06B6D4" stop-opacity="0.0"/>
+                <stop offset="0%" stop-color="#B7F36B" stop-opacity="0.22"/>
+                <stop offset="100%" stop-color="#B7F36B" stop-opacity="0.0"/>
             </linearGradient>
             <linearGradient id="outboundGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.18"/>
-                <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
+                <stop offset="0%" stop-color="#82A8C8" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#82A8C8" stop-opacity="0.0"/>
             </linearGradient>
         </defs>
 
         <!-- Subtle Grid Lines -->
-        <line x1="0" y1="40" x2="${W}" y2="40" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
-        <line x1="0" y1="90" x2="${W}" y2="90" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
-        <line x1="0" y1="140" x2="${W}" y2="140" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
+        <line x1="0" y1="40" x2="${W}" y2="40" stroke="#252A32" stroke-dasharray="4 4" stroke-width="1"/>
+        <line x1="0" y1="90" x2="${W}" y2="90" stroke="#252A32" stroke-dasharray="4 4" stroke-width="1"/>
+        <line x1="0" y1="140" x2="${W}" y2="140" stroke="#252A32" stroke-dasharray="4 4" stroke-width="1"/>
 
         <!-- Inbound Area & Smooth Waveform with Motion Drawing Animations -->
         <path d="${inArea}" fill="url(#inboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) forwards;" />
-        <path d="${inPath}" fill="none" stroke="#06B6D4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) forwards;" />
+        <path d="${inPath}" fill="none" stroke="#B7F36B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) forwards;" />
 
         <!-- Outbound Area & Smooth Waveform with Staggered Motion Drawing Animations -->
         <path d="${outArea}" fill="url(#outboundGradient)" style="animation: chartAreaFade 0.65s var(--ease-spring-bouncy) 0.08s forwards;" />
-        <path d="${outPath}" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) 0.08s forwards;" />
+        <path d="${outPath}" fill="none" stroke="#82A8C8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1500" stroke-dashoffset="1500" style="animation: chartLineDraw 0.85s var(--ease-spring-snappy) 0.08s forwards;" />
 
         <!-- Interactive Data Dots with Staggered Spring Pop -->
-        ${inPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3.5" fill="#06B6D4" stroke="#090e1c" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22}ms both;"><title>Inbound: ${p.pt.inbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
-        ${outPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3" fill="#38bdf8" stroke="#090e1c" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22 + 80}ms both;"><title>Outbound: ${p.pt.outbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
+        ${inPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3.5" fill="#B7F36B" stroke="#090A0C" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22}ms both;"><title>Inbound: ${p.pt.inbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
+        ${outPoints.map((p, idx) => `<circle class="chart-dot-interactive" cx="${p.x}" cy="${p.y}" r="3" fill="#82A8C8" stroke="#090A0C" stroke-width="1.5" style="animation: dotPop 0.4s var(--ease-spring-bouncy) ${idx * 22 + 80}ms both;"><title>Outbound: ${p.pt.outbound_mbps} Mbps (${p.pt.timestamp})</title></circle>`).join("")}
     `;
 
     // Axis labels
@@ -2725,12 +2725,12 @@ async function loadNetworkTopology() {
         });
 
         Object.values(nodePositions).forEach(pos => {
-            ctx.fillStyle = "#06B6D4";
+            ctx.fillStyle = "#B7F36B";
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
             ctx.fill();
 
-            ctx.fillStyle = "#f8fafc";
+            ctx.fillStyle = "#F1F3F5";
             ctx.font = "11px 'JetBrains Mono', monospace";
             ctx.fillText(pos.label, pos.x + 10, pos.y + 4);
         });
