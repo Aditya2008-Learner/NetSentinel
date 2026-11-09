@@ -335,6 +335,7 @@ async def api_analyze_network_logs(request: Request, file: UploadFile = File(...
 
 @app.get("/api/network/history")
 async def api_get_network_history(limit: int = 20):
+    limit = max(1, min(limit, 200))
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -397,6 +398,20 @@ async def api_create_investigation(
             VALUES (?, ?, ?, ?, 'Open')
             """,
             (inv_id, clean_title, description, case_ref),
+        )
+        cursor.execute(
+            """
+            INSERT INTO incident_cases (case_id, title, status, owner, summary)
+            VALUES (?, ?, 'Open', 'Lead Investigator', ?)
+            """,
+            (inv_id, clean_title, description),
+        )
+        cursor.execute(
+            """
+            INSERT INTO incident_timeline (case_id, actor, action, artifact_ref)
+            VALUES (?, ?, ?, ?)
+            """,
+            (inv_id, "Investigator", f"Investigation case {inv_id} created: {clean_title}", case_ref),
         )
         conn.commit()
     finally:
@@ -469,6 +484,67 @@ async def api_create_device(
     return created_device
 
 
+@app.get("/api/devices/{device_id}/inspection")
+async def api_inspect_device(device_id: str):
+    clean_id = (device_id or "").strip()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM devices WHERE id = ?", (clean_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Device not found")
+        dev = dict(row)
+        ip = dev.get("ip_address")
+
+        # Query real traffic stats associated with this device IP from live_flows
+        cursor.execute(
+            """
+            SELECT 
+                COUNT(*) as total_flows,
+                COALESCE(SUM(packets), 0) as total_packets,
+                COALESCE(SUM(bytes), 0) as total_bytes
+            FROM live_flows 
+            WHERE src_ip = ? OR dst_ip = ?
+            """,
+            (ip, ip)
+        )
+        traffic_stats = dict(cursor.fetchone() or {"total_flows": 0, "total_packets": 0, "total_bytes": 0})
+
+        # Query recent connection events touching this device
+        cursor.execute(
+            """
+            SELECT id, timestamp, src_ip, dst_ip, src_port, dst_port, protocol, bytes 
+            FROM live_flows 
+            WHERE src_ip = ? OR dst_ip = ? 
+            ORDER BY id DESC LIMIT 15
+            """,
+            (ip, ip)
+        )
+        recent_events = [dict(r) for r in cursor.fetchall()]
+
+        # Query associated security alerts touching this device
+        cursor.execute(
+            """
+            SELECT alert_id, rule_id, title, severity, confidence, detected_at, status 
+            FROM security_alerts 
+            WHERE source_ip = ? OR dest_ip = ? 
+            ORDER BY detected_at DESC LIMIT 10
+            """,
+            (ip, ip)
+        )
+        associated_alerts = [dict(r) for r in cursor.fetchall()]
+
+        return {
+            "device": dev,
+            "traffic_stats": traffic_stats,
+            "recent_events": recent_events,
+            "associated_alerts": associated_alerts
+        }
+    finally:
+        conn.close()
+
+
 @app.delete("/api/devices/{device_id}")
 async def api_delete_device(device_id: str):
     clean_id = (device_id or "").strip()
@@ -499,6 +575,8 @@ async def api_search(q: str = Query("", alias="q")):
                 "devices": [],
                 "integrity_baselines": [],
                 "analysis_history": [],
+                "security_alerts": [],
+                "incident_cases": [],
             },
         }
 
@@ -511,7 +589,7 @@ async def api_search(q: str = Query("", alias="q")):
             """
             SELECT * FROM investigations
             WHERE title LIKE ? OR description LIKE ? OR case_ref LIKE ? OR findings_summary LIKE ?
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC LIMIT 20
             """,
             (pattern, pattern, pattern, pattern),
         )
@@ -521,7 +599,7 @@ async def api_search(q: str = Query("", alias="q")):
             """
             SELECT * FROM devices
             WHERE hostname LIKE ? OR ip_address LIKE ? OR mac_address LIKE ? OR observation_source LIKE ?
-            ORDER BY last_seen DESC
+            ORDER BY last_seen DESC LIMIT 20
             """,
             (pattern, pattern, pattern, pattern),
         )
@@ -531,7 +609,7 @@ async def api_search(q: str = Query("", alias="q")):
             """
             SELECT * FROM integrity_baselines
             WHERE filename LIKE ? OR sha256 LIKE ? OR notes LIKE ?
-            ORDER BY recorded_at DESC
+            ORDER BY recorded_at DESC LIMIT 20
             """,
             (pattern, pattern, pattern),
         )
@@ -541,17 +619,39 @@ async def api_search(q: str = Query("", alias="q")):
             """
             SELECT * FROM analysis_history
             WHERE filename LIKE ? OR operation_type LIKE ? OR details LIKE ?
-            ORDER BY id DESC
+            ORDER BY id DESC LIMIT 20
             """,
             (pattern, pattern, pattern),
         )
         analysis_history = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute(
+            """
+            SELECT * FROM security_alerts
+            WHERE title LIKE ? OR source_ip LIKE ? OR rule_id LIKE ? OR alert_id LIKE ?
+            ORDER BY detected_at DESC LIMIT 20
+            """,
+            (pattern, pattern, pattern, pattern)
+        )
+        security_alerts = [dict(row) for row in cursor.fetchall()]
+
+        cursor.execute(
+            """
+            SELECT * FROM incident_cases
+            WHERE title LIKE ? OR summary LIKE ? OR case_id LIKE ?
+            ORDER BY updated_at DESC LIMIT 20
+            """,
+            (pattern, pattern, pattern)
+        )
+        incident_cases = [dict(row) for row in cursor.fetchall()]
 
         total_results = (
             len(investigations)
             + len(devices)
             + len(integrity_baselines)
             + len(analysis_history)
+            + len(security_alerts)
+            + len(incident_cases)
         )
 
         return {
@@ -562,6 +662,8 @@ async def api_search(q: str = Query("", alias="q")):
                 "devices": devices,
                 "integrity_baselines": integrity_baselines,
                 "analysis_history": analysis_history,
+                "security_alerts": security_alerts,
+                "incident_cases": incident_cases,
             },
         }
     finally:
@@ -742,6 +844,7 @@ async def api_collector_events(request: Request, payload: dict, api_key: str = D
             """,
             (last_iface, total_packets, total_bytes)
         )
+        cursor.execute("DELETE FROM live_flows WHERE received_at < datetime('now', '-24 hours')")
         conn.commit()
 
         # Evaluate threat heuristics
@@ -811,9 +914,67 @@ async def api_integrity_verify(
     file_bytes = await _read_limited(file)
     current_hash = calculate_sha256(file_bytes)
 
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM integrity_baselines WHERE filename = ? ORDER BY recorded_at DESC LIMIT 1",
+            (safe_name,),
+        )
+        existing = cursor.fetchone()
+    finally:
+        conn.close()
+
+    baseline = existing is not None
+    baseline_hash = existing["sha256"] if baseline else None
     match = None
-    if reference_hash:
-        match = current_hash.lower() == reference_hash.strip().lower()
+
+    if baseline:
+        match = (current_hash.lower() == baseline_hash.lower())
+
+    if reference_hash and reference_hash.strip():
+        ref_match = (current_hash.lower() == reference_hash.strip().lower())
+        match = ref_match if match is None else (match and ref_match)
+
+    has_ref = bool(reference_hash and reference_hash.strip())
+    status = "VERIFIED" if match else ("TAMPERED_OR_MISMATCH" if (baseline or has_ref) else "UNREGISTERED")
+
+    return {
+        "filename": safe_name,
+        "current_sha256": current_hash,
+        "reference_hash": reference_hash,
+        "baseline_hash": baseline_hash if baseline else None,
+        "match": match,
+        "file_size": len(file_bytes),
+        "status": status,
+    }
+
+
+@app.post("/api/integrity/register")
+async def api_integrity_register(
+    file: Optional[UploadFile] = File(None),
+    filename: Optional[str] = Form(None),
+    sha256: Optional[str] = Form(None),
+    notes: Optional[str] = Form("Registered baseline"),
+):
+    if file and file.filename:
+        safe_name = _sanitize_filename(file.filename)
+        file_bytes = await _read_limited(file)
+        hash_val = calculate_sha256(file_bytes)
+        file_size = len(file_bytes)
+    elif filename and filename.strip() and sha256 and sha256.strip():
+        safe_name = _sanitize_filename(filename)
+        clean_hash = sha256.strip().lower()
+        if len(clean_hash) != 64 or not all(c in "0123456789abcdef" for c in clean_hash):
+            raise HTTPException(status_code=400, detail="Invalid SHA-256 hash format. 64 hexadecimal characters expected.")
+        current_hash = clean_hash
+        hash_val = clean_hash
+        file_size = 0
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Either a file upload or both filename and sha256 must be provided.",
+        )
 
     unique_id = f"HASH-{int(datetime.utcnow().timestamp())}-{uuid.uuid4().hex[:6]}"
     conn = get_db_connection()
@@ -827,9 +988,9 @@ async def api_integrity_verify(
             (
                 unique_id,
                 safe_name,
-                current_hash,
-                len(file_bytes),
-                "Verified via UI",
+                hash_val,
+                file_size,
+                notes or "Registered baseline",
             ),
         )
         conn.commit()
@@ -837,11 +998,10 @@ async def api_integrity_verify(
         conn.close()
 
     return {
+        "success": True,
+        "id": unique_id,
         "filename": safe_name,
-        "current_sha256": current_hash,
-        "reference_hash": reference_hash,
-        "match": match,
-        "file_size": len(file_bytes),
+        "sha256": hash_val,
     }
 
 
@@ -1001,6 +1161,7 @@ def _build_telemetry_series(time_range: str, sim: dict) -> list:
     num_points, step = _RANGE_CONFIG.get(time_range, (12, 300))
 
     now_ts = int(datetime.utcnow().timestamp())
+    aligned_now = (now_ts // step) * step
 
     def _continuous_hash_noise(ts: int, channel: int) -> float:
         """Generate deterministic noise [0..1] from exact timestamp and channel."""
@@ -1010,7 +1171,7 @@ def _build_telemetry_series(time_range: str, sim: dict) -> list:
 
     series = []
     for i in range(num_points):
-        ts = now_ts - ((num_points - 1 - i) * step)
+        ts = aligned_now - ((num_points - 1 - i) * step)
         dt_iso = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         phase = (ts / step) * 0.4
@@ -1070,8 +1231,8 @@ def _get_collector_telemetry(time_range: str, sim: dict) -> dict:
                 cursor.execute(
                     """
                     SELECT 
-                        COALESCE(SUM(bytes) * 8 / 1000000.0, 0) as mbps,
-                        COALESCE(SUM(packets), 0) as pps
+                        COALESCE(SUM(bytes) * 8 / 1000000.0 / 5.0, 0) as mbps,
+                        COALESCE(SUM(packets) / 5.0, 0) as pps
                     FROM live_flows 
                     WHERE received_at >= datetime('now', '-5 seconds')
                     """
@@ -1081,10 +1242,8 @@ def _get_collector_telemetry(time_range: str, sim: dict) -> dict:
                 if series and recent_agg:
                     real_in = round(float(recent_agg["mbps"]), 2)
                     real_pps = int(recent_agg["pps"])
-                    if real_in > 0:
-                        series[-1]["inbound_mbps"] = real_in
-                    if real_pps > 0:
-                        series[-1]["packets_per_sec"] = real_pps
+                    series[-1]["inbound_mbps"] = real_in
+                    series[-1]["packets_per_sec"] = real_pps
                 return {
                     "range": time_range,
                     "data_source": "REAL_COLLECTOR",
@@ -1336,12 +1495,41 @@ async def api_get_incident_cases():
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM incident_cases ORDER BY updated_at DESC")
         cases = []
+        seen_case_ids = set()
         for row in cursor.fetchall():
             c = dict(row)
-            c_id = c["case_id"]
-            c_cursor = conn.execute("SELECT * FROM incident_timeline WHERE case_id = ? ORDER BY timestamp ASC", (c_id,))
-            c["timeline"] = [dict(t) for t in c_cursor.fetchall()]
+            seen_case_ids.add(c["case_id"])
             cases.append(c)
+
+        cursor.execute("SELECT * FROM investigations ORDER BY created_at DESC")
+        for row in cursor.fetchall():
+            inv_id = row["id"]
+            if inv_id not in seen_case_ids:
+                seen_case_ids.add(inv_id)
+                cases.append({
+                    "case_id": inv_id,
+                    "title": row["title"],
+                    "status": row["status"] or "Open",
+                    "owner": "Lead Investigator",
+                    "summary": row["description"] or "",
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"] or row["created_at"],
+                })
+
+        case_ids = [c["case_id"] for c in cases]
+        timeline_map = {}
+        if case_ids:
+            placeholders = ",".join("?" for _ in case_ids)
+            c_cursor = conn.execute(
+                f"SELECT * FROM incident_timeline WHERE case_id IN ({placeholders}) ORDER BY timestamp ASC",
+                case_ids,
+            )
+            for t in c_cursor.fetchall():
+                t_dict = dict(t)
+                timeline_map.setdefault(t_dict["case_id"], []).append(t_dict)
+        for c in cases:
+            c["timeline"] = timeline_map.get(c["case_id"], [])
+
         return cases
     finally:
         conn.close()
@@ -1382,7 +1570,15 @@ async def api_add_case_timeline_event(case_id: str, payload: dict):
         cursor = conn.cursor()
         cursor.execute("SELECT case_id FROM incident_cases WHERE case_id = ?", (case_id,))
         if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Case not found")
+            cursor.execute("SELECT id, title, description, status FROM investigations WHERE id = ?", (case_id,))
+            inv_row = cursor.fetchone()
+            if inv_row:
+                cursor.execute(
+                    "INSERT INTO incident_cases (case_id, title, status, owner, summary) VALUES (?, ?, ?, 'Lead Investigator', ?)",
+                    (case_id, inv_row["title"], inv_row["status"] or "Open", inv_row["description"])
+                )
+            else:
+                raise HTTPException(status_code=404, detail="Case not found")
         cursor.execute(
             "INSERT INTO incident_timeline (case_id, actor, action, artifact_ref) VALUES (?, ?, ?, ?)",
             (case_id, actor, action, artifact_ref)

@@ -226,6 +226,18 @@ def init_db_conn(conn: sqlite3.Connection) -> None:
             (r_id, r_name, r_cat, r_sev, r_conf, r_desc)
         )
 
+    # Indexes for query performance
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_live_flows_received ON live_flows(received_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_live_flows_src_dst ON live_flows(src_ip, dst_ip)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_live_flows_src ON live_flows(src_ip)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_live_flows_dst ON live_flows(dst_ip)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_live_flows_protocol ON live_flows(protocol)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_alerts_rule ON security_alerts(rule_id, source_ip, status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_integrity_baselines_sha ON integrity_baselines(sha256)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_integrity_baselines_file ON integrity_baselines(filename)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_timeline_case ON incident_timeline(case_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_devices_ip ON devices(ip_address)")
+
     conn.commit()
 
 
@@ -239,7 +251,6 @@ def get_db_connection() -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass
     conn.row_factory = sqlite3.Row
-    init_db_conn(conn)
     return conn
 
 

@@ -607,3 +607,316 @@ def test_dashboard_page_serves_index_html():
     assert response.headers.get("x-content-type-options") == "nosniff"
     assert response.headers.get("x-frame-options") == "DENY"
     assert "content-security-policy" in response.headers
+
+
+def test_telemetry_timestamp_alignment():
+    from datetime import datetime
+    from app.main import _build_telemetry_series
+    series = _build_telemetry_series("1h", {"active": False, "scenario": ""})
+    assert len(series) == 12
+    # Check that timestamps align to 300 second boundary
+    for pt in series:
+        dt = datetime.strptime(pt["timestamp"], "%Y-%m-%dT%H:%M:%SZ")
+        ts = int(dt.timestamp())
+        assert ts % 300 == 0
+
+
+def test_integrity_register_and_verify():
+    import hashlib
+    import uuid
+    filename = f"config_{uuid.uuid4().hex[:8]}.cfg"
+    content = b"CriticalSecurityConfiguration123"
+    expected_hash = hashlib.sha256(content).hexdigest()
+
+    # Verify before registration without reference_hash -> UNREGISTERED
+    res_unreg = client.post(
+        "/api/integrity/verify",
+        files={"file": (filename, content, "application/octet-stream")},
+    )
+    assert res_unreg.status_code == 200
+    unreg_data = res_unreg.json()
+    assert unreg_data["status"] == "UNREGISTERED"
+    assert unreg_data["match"] is None
+
+    # Register baseline
+    res_reg = client.post(
+        "/api/integrity/register",
+        files={"file": (filename, content, "application/octet-stream")},
+    )
+    assert res_reg.status_code == 200
+    reg_data = res_reg.json()
+    assert reg_data["success"] is True
+    assert reg_data["sha256"] == expected_hash
+
+    # Verify against registered baseline -> VERIFIED
+    res_verify = client.post(
+        "/api/integrity/verify",
+        files={"file": (filename, content, "application/octet-stream")},
+    )
+    assert res_verify.status_code == 200
+    verify_data = res_verify.json()
+    assert verify_data["match"] is True
+    assert verify_data["status"] == "VERIFIED"
+    assert verify_data["baseline_hash"] == expected_hash
+
+    # Tampered file verification -> TAMPERED_OR_MISMATCH
+    tampered_content = b"TamperedSecurityConfiguration999"
+    res_tamper = client.post(
+        "/api/integrity/verify",
+        files={"file": (filename, tampered_content, "application/octet-stream")},
+    )
+    assert res_tamper.status_code == 200
+    tamper_data = res_tamper.json()
+    assert tamper_data["match"] is False
+    assert tamper_data["status"] == "TAMPERED_OR_MISMATCH"
+
+
+def test_investigation_dual_case_creation_and_timeline():
+    # Create investigation
+    res = client.post(
+        "/api/investigations",
+        data={"title": "Dual Case Test Investigation", "description": "Investigating anomaly", "case_ref": "REF-DUAL-01"},
+    )
+    assert res.status_code == 200
+    inv_id = res.json()["id"]
+
+    # Retrieve SOC cases and verify it appears with timeline
+    soc_res = client.get("/api/soc/cases")
+    assert soc_res.status_code == 200
+    cases = soc_res.json()
+    matched = [c for c in cases if c["case_id"] == inv_id]
+    assert len(matched) == 1
+    assert matched[0]["title"] == "Dual Case Test Investigation"
+    assert len(matched[0]["timeline"]) >= 1
+    assert any("Dual Case Test Investigation" in t["action"] for t in matched[0]["timeline"])
+
+
+def test_network_history_limit_capping():
+    res = client.get("/api/network/history?limit=500")
+    assert res.status_code == 200
+    records = res.json()
+    assert len(records) <= 200
+
+
+def test_integrity_verification_decoupled_from_baseline_creation():
+    import hashlib
+    import uuid
+    from app.database import get_db_connection
+
+    test_filename = f"integrity_decoupled_{uuid.uuid4().hex[:8]}.cfg"
+    content = b"KernelModuleSecurityParameters_v1.0"
+    expected_hash = hashlib.sha256(content).hexdigest()
+
+    # 1. Upload to /api/integrity/verify without baseline or reference hash
+    verify_unreg = client.post(
+        "/api/integrity/verify",
+        files={"file": (test_filename, content, "application/octet-stream")},
+    )
+    assert verify_unreg.status_code == 200
+    data_unreg = verify_unreg.json()
+    assert data_unreg["status"] == "UNREGISTERED"
+    assert data_unreg["match"] is None
+    assert data_unreg["current_sha256"] == expected_hash
+
+    # Confirm NO baseline entry was created in database
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM integrity_baselines WHERE filename = ?", (test_filename,))
+        count = cur.fetchone()[0]
+        assert count == 0, "Verify should not create a baseline record in the database"
+    finally:
+        conn.close()
+
+    # 2. Register via /api/integrity/register
+    reg_res = client.post(
+        "/api/integrity/register",
+        files={"file": (test_filename, content, "application/octet-stream")},
+    )
+    assert reg_res.status_code == 200
+    reg_data = reg_res.json()
+    assert reg_data["success"] is True
+    assert reg_data["sha256"] == expected_hash
+
+    # 3. Subsequent verify returns status="VERIFIED" and match=True
+    verify_match = client.post(
+        "/api/integrity/verify",
+        files={"file": (test_filename, content, "application/octet-stream")},
+    )
+    assert verify_match.status_code == 200
+    data_match = verify_match.json()
+    assert data_match["status"] == "VERIFIED"
+    assert data_match["match"] is True
+    assert data_match["baseline_hash"] == expected_hash
+
+    # 4. Verify with an altered/mismatched reference hash and check status="TAMPERED_OR_MISMATCH" and match=False
+    mismatched_hash = "0" * 64
+    verify_mismatch = client.post(
+        "/api/integrity/verify",
+        files={"file": (test_filename, content, "application/octet-stream")},
+        data={"reference_hash": mismatched_hash},
+    )
+    assert verify_mismatch.status_code == 200
+    data_mismatch = verify_mismatch.json()
+    assert data_mismatch["status"] == "TAMPERED_OR_MISMATCH"
+    assert data_mismatch["match"] is False
+
+
+def test_investigation_creation_syncs_timeline():
+    import uuid
+    from app.database import get_db_connection
+
+    case_ref = f"REF-SYNC-{uuid.uuid4().hex[:6]}"
+    title = f"Timeline Sync Case {uuid.uuid4().hex[:6]}"
+    desc = "Automated test for investigation timeline synchronization"
+
+    # Create investigation
+    create_res = client.post(
+        "/api/investigations",
+        data={"title": title, "description": desc, "case_ref": case_ref},
+    )
+    assert create_res.status_code == 200
+    inv = create_res.json()
+    inv_id = inv["id"]
+    assert inv_id.startswith("INV-")
+
+    # Verify entry in incident_cases table
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM incident_cases WHERE case_id = ?", (inv_id,))
+        case_row = cur.fetchone()
+        assert case_row is not None, f"Expected incident_cases entry for {inv_id}"
+        assert case_row["title"] == title
+
+        # Verify initial event in incident_timeline table
+        cur.execute("SELECT * FROM incident_timeline WHERE case_id = ? ORDER BY timestamp ASC", (inv_id,))
+        timeline_events = cur.fetchall()
+        assert len(timeline_events) >= 1, f"Expected initial timeline event for {inv_id}"
+        assert any(title in e["action"] for e in timeline_events)
+    finally:
+        conn.close()
+
+    # Verify visibility via GET /api/soc/cases
+    soc_res = client.get("/api/soc/cases")
+    assert soc_res.status_code == 200
+    cases = soc_res.json()
+    matching_cases = [c for c in cases if c["case_id"] == inv_id]
+    assert len(matching_cases) == 1
+    target_case = matching_cases[0]
+    assert target_case["title"] == title
+    assert len(target_case.get("timeline", [])) >= 1
+    assert any(title in t["action"] for t in target_case["timeline"])
+
+
+def test_telemetry_step_alignment():
+    from datetime import datetime
+
+    # Consecutive calls to /api/telemetry?range=15m
+    r1 = client.get("/api/telemetry?range=15m")
+    r2 = client.get("/api/telemetry?range=15m")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+
+    series1 = r1.json()["series"]
+    series2 = r2.json()["series"]
+    assert len(series1) == 15
+    assert len(series2) == 15
+
+    # Timestamps should be stable across consecutive calls
+    timestamps1 = [p["timestamp"] for p in series1]
+    timestamps2 = [p["timestamp"] for p in series2]
+    assert timestamps1 == timestamps2
+
+    # Timestamps must be step-aligned to 60-second boundaries (not shifting second-by-second)
+    for ts_str in timestamps1:
+        dt = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ")
+        epoch = int(dt.timestamp())
+        assert epoch % 60 == 0, f"Timestamp {ts_str} (epoch {epoch}) is not step-aligned to 60s"
+
+
+def test_stego_streaming_extraction_invalid():
+    import io
+    from PIL import Image
+    from app.stego_service import extract_secret_from_bytes
+
+    # Create a clean RGB image with no embedded message
+    img = Image.new("RGB", (64, 64), color=(30, 60, 90))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    clean_bytes = buf.getvalue()
+
+    success, message = extract_secret_from_bytes(clean_bytes)
+    assert success is False
+    assert message == "No hidden message found or invalid payload length"
+
+
+def test_integrity_verify_whitespace_reference_hash():
+    import hashlib
+    import uuid
+
+    filename = f"whitespace_ref_{uuid.uuid4().hex[:8]}.cfg"
+    content = b"UnregisteredContentForWhitespaceRefTest"
+    expected_hash = hashlib.sha256(content).hexdigest()
+
+    # Verify with whitespace-only reference_hash on unregistered file
+    res = client.post(
+        "/api/integrity/verify",
+        data={"reference_hash": "   \t  \n  "},
+        files={"file": (filename, content, "application/octet-stream")},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "UNREGISTERED"
+    assert data["match"] is None
+    assert data["current_sha256"] == expected_hash
+
+
+def test_integrity_register_invalid_manual_sha256():
+    # 1. Invalid hex characters
+    res_bad_hex = client.post(
+        "/api/integrity/register",
+        data={"filename": "test_bad_hex.cfg", "sha256": "g" * 64},
+    )
+    assert res_bad_hex.status_code == 400
+    assert "Invalid SHA-256 hash format" in res_bad_hex.json()["detail"]
+
+    # 2. Too short
+    res_short = client.post(
+        "/api/integrity/register",
+        data={"filename": "test_short.cfg", "sha256": "abcd1234"},
+    )
+    assert res_short.status_code == 400
+    assert "Invalid SHA-256 hash format" in res_short.json()["detail"]
+
+    # 3. Too long
+    res_long = client.post(
+        "/api/integrity/register",
+        data={"filename": "test_long.cfg", "sha256": "a" * 65},
+    )
+    assert res_long.status_code == 400
+    assert "Invalid SHA-256 hash format" in res_long.json()["detail"]
+
+    # 4. Whitespace-only sha256 or filename
+    res_ws_hash = client.post(
+        "/api/integrity/register",
+        data={"filename": "test_ws.cfg", "sha256": "   "},
+    )
+    assert res_ws_hash.status_code == 400
+
+    res_ws_name = client.post(
+        "/api/integrity/register",
+        data={"filename": "   ", "sha256": "a" * 64},
+    )
+    assert res_ws_name.status_code == 400
+
+    # 5. Valid manual sha256 registration succeeds
+    valid_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    res_valid = client.post(
+        "/api/integrity/register",
+        data={"filename": "test_valid.cfg", "sha256": valid_hash},
+    )
+    assert res_valid.status_code == 200
+    assert res_valid.json()["success"] is True
+    assert res_valid.json()["sha256"] == valid_hash
+

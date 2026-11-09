@@ -17,7 +17,7 @@ def list_available_interfaces() -> List[Dict[str, Any]]:
     interfaces = []
     if not SCAPY_AVAILABLE:
         logger.warning("Scapy is not installed. Returning dummy interface.")
-        return [{"name": "Default Interface", "ip": "127.0.0.1", "description": "Scapy unavailable"}]
+        return [{"id": 0, "name": "Default Interface", "ip": "127.0.0.1", "description": "Scapy unavailable"}]
 
     try:
         if_list = get_if_list()

@@ -6,7 +6,7 @@ import sys
 import time
 from .config import BACKEND_URL, COLLECTOR_API_KEY, AGGREGATION_INTERVAL, LOCAL_DB_PATH, CAPTURE_FILTER
 from .interfaces import list_available_interfaces, select_interface
-from .capture import PacketCaptureEngine
+from .capture import PacketCaptureEngine, SCAPY_AVAILABLE
 from .event_processor import EventProcessor
 from .storage import LocalStorageBuffer
 from .transport import TransportClient
@@ -19,6 +19,21 @@ logging.basicConfig(
 logger = logging.getLogger("net_sentinel_collector")
 
 
+def check_windows_prerequisites() -> None:
+    if sys.platform == "win32":
+        if not SCAPY_AVAILABLE:
+            print("Diagnostic: Scapy is not installed. Live network packet capture on Windows requires Scapy and Npcap.")
+            print("Install Scapy using 'pip install scapy' and download Npcap from https://npcap.com/.\n")
+        else:
+            try:
+                from scapy.all import conf
+                if not getattr(conf, "use_pcap", True):
+                    print("Diagnostic: Npcap was not detected on Windows. Live network packet capture requires Npcap.")
+                    print("Download and install Npcap from https://npcap.com/ (ensure 'WinPcap API-compatible Mode' is enabled).\n")
+            except Exception:
+                pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="Net Sentinel Windows Live Network Collector")
     parser.add_argument("--list-interfaces", action="store_true", help="List available network interfaces and exit")
@@ -28,19 +43,20 @@ def main():
     args = parser.parse_args()
 
     print("=== Net Sentinel Windows Live Network Collector ===")
+    check_windows_prerequisites()
     interfaces = list_available_interfaces()
 
     if args.list_interfaces:
         print("\nAvailable Network Interfaces:")
         for iface in interfaces:
-            print(f"  [{iface['id']}] {iface['name']} (IP: {iface['ip']})")
+            print(f"  [{iface.get('id', 0)}] {iface['name']} (IP: {iface['ip']})")
         sys.exit(0)
 
     # Determine interface
     selected_iface = interfaces[0]["name"]
     if args.interface:
         for iface in interfaces:
-            if str(iface['id']) == args.interface or iface['name'].lower() == args.interface.lower():
+            if str(iface.get('id', 0)) == args.interface or iface['name'].lower() == args.interface.lower():
                 selected_iface = iface['name']
                 break
         else:
@@ -69,6 +85,11 @@ def main():
     try:
         while True:
             time.sleep(AGGREGATION_INTERVAL)
+            if not engine.is_running:
+                logger.error("Packet capture engine is not running. Attempting restart...")
+                if not engine.start():
+                    logger.error("Failed to restart packet capture engine. Exiting.")
+                    sys.exit(1)
             batch = processor.flush_flows()
             if batch:
                 logger.info("Captured %d flows. Submitting to backend...", len(batch))

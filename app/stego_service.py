@@ -96,15 +96,20 @@ def _analyze_image_forensics_pil(img: Image.Image, file_bytes: bytes, filename: 
     file_size = len(file_bytes)
 
     rgb_img = img.convert("RGB")
+    total_pixels = width * height
+    target_samples = 10000
+    step = max(1, total_pixels // target_samples) if total_pixels > 0 else 1
+
     lsb_count = 0
     total_samples = 0
-    for pixel in _iter_pixel_tuples(rgb_img):
-        r, g, b = pixel
-        if (r & 1) ^ (g & 1) ^ (b & 1):
-            lsb_count += 1
-        total_samples += 1
-        if total_samples >= 10000:
-            break
+    for idx, pixel in enumerate(_iter_pixel_tuples(rgb_img)):
+        if idx % step == 0:
+            r, g, b = pixel
+            if (r & 1) ^ (g & 1) ^ (b & 1):
+                lsb_count += 1
+            total_samples += 1
+            if total_samples >= target_samples:
+                break
     
     noise_ratio = lsb_count / total_samples if total_samples > 0 else 0
     entropy_factor = max(0.0, 1.0 - 2.0 * abs(noise_ratio - 0.5))
@@ -129,6 +134,7 @@ def _analyze_image_forensics_pil(img: Image.Image, file_bytes: bytes, filename: 
         "file_size_bytes": file_size,
         "sha256": sha256_hash,
         "susposity_score": susposity_score,
+        "suspicion_score": susposity_score,
         "indicators": indicators,
         "status": "Analyzed successfully"
     }
@@ -146,40 +152,27 @@ def extract_secret_from_bytes(file_bytes: bytes) -> Tuple[bool, str]:
             if total_bits < 32:
                 return False, "No hidden message found or invalid payload length"
 
-            pixels = _get_pixel_tuples(rgb_img)
+            def _bit_stream():
+                for r, g, b in _iter_pixel_tuples(rgb_img):
+                    yield r & 1
+                    yield g & 1
+                    yield b & 1
 
-            # Flatten all channel bits into a generator or list
-            all_bits = []
-            for r, g, b in pixels:
-                all_bits.append(r & 1)
-                all_bits.append(g & 1)
-                all_bits.append(b & 1)
+            stream = _bit_stream()
 
-            if len(all_bits) < 32:
+            length = 0
+            for _ in range(32):
+                length = (length << 1) | next(stream)
+
+            if length <= 0 or length > 1_000_000 or (32 + length * 8) > total_bits:
                 return False, "No hidden message found or invalid payload length"
 
-            length_bits = all_bits[:32]
-            try:
-                length = int("".join(str(b) for b in length_bits), 2)
-            except ValueError:
-                return False, "No hidden message found or invalid payload length"
-
-            if length <= 0 or length > 1_000_000 or (32 + length * 8) > len(all_bits):
-                return False, "No hidden message found or invalid payload length"
-
-            message_bits = all_bits[32 : 32 + length * 8]
             message_bytes = bytearray()
-            for i in range(0, len(message_bits), 8):
-                byte_bits = message_bits[i : i + 8]
-                if len(byte_bits) < 8:
-                    break
-                current_byte = 0
-                for b in byte_bits:
-                    current_byte = (current_byte << 1) | b
-                message_bytes.append(current_byte)
-
-            if len(message_bytes) != length:
-                return False, "No hidden message found or invalid payload length"
+            for _ in range(length):
+                byte_val = 0
+                for _ in range(8):
+                    byte_val = (byte_val << 1) | next(stream)
+                message_bytes.append(byte_val)
 
             decoded_text = message_bytes.decode("utf-8", errors="replace")
             return True, decoded_text

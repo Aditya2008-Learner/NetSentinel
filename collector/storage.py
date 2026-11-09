@@ -6,6 +6,11 @@ import logging
 from pathlib import Path
 from typing import List
 
+try:
+    from .config import MAX_LOCAL_QUEUE_SIZE
+except ImportError:
+    MAX_LOCAL_QUEUE_SIZE = 10000
+
 logger = logging.getLogger("net_sentinel_collector")
 
 SCHEMA_DDL = """
@@ -24,9 +29,14 @@ class LocalStorageBuffer:
         self.db_path = db_path
         self._init_db()
 
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA busy_timeout = 3000")
+        return conn
+
     def _init_db(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         try:
             conn.execute(SCHEMA_DDL)
             conn.commit()
@@ -36,10 +46,19 @@ class LocalStorageBuffer:
     def enqueue(self, events: List[dict]) -> None:
         if not events:
             return
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM local_queue")
+            count = cursor.fetchone()[0]
+            if count >= MAX_LOCAL_QUEUE_SIZE:
+                overflow = (count - MAX_LOCAL_QUEUE_SIZE) + len(events)
+                cursor.execute(
+                    "DELETE FROM local_queue WHERE id IN (SELECT id FROM local_queue ORDER BY id ASC LIMIT ?)",
+                    (overflow,)
+                )
             payload = json.dumps(events)
-            conn.execute("INSERT INTO local_queue (payload) VALUES (?)", (payload,))
+            cursor.execute("INSERT INTO local_queue (payload) VALUES (?)", (payload,))
             conn.commit()
         except Exception as exc:
             logger.error("Failed to buffer events locally: %s", exc)
@@ -48,7 +67,7 @@ class LocalStorageBuffer:
 
     def get_pending_batches(self, limit: int = 10) -> List[tuple]:
         """Return list of (row_id, events_list) tuples."""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute("SELECT id, payload FROM local_queue ORDER BY id ASC LIMIT ?", (limit,))
@@ -61,7 +80,7 @@ class LocalStorageBuffer:
             conn.close()
 
     def remove_batch(self, row_id: int) -> None:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         try:
             conn.execute("DELETE FROM local_queue WHERE id = ?", (row_id,))
             conn.commit()
@@ -71,7 +90,7 @@ class LocalStorageBuffer:
             conn.close()
 
     def queue_size(self) -> int:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         try:
             cursor = conn.execute("SELECT COUNT(*) FROM local_queue")
             return cursor.fetchone()[0]

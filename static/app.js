@@ -49,7 +49,11 @@ window.addEventListener("drop", (e) => {
 document.addEventListener("DOMContentLoaded", () => {
     initNavigation();
     initForms();
-    initGlobalSearch();
+    initCommandPalette();
+    initDeviceInspector();
+    initNotificationCenter();
+    initTelemetryCrosshair();
+    initTimelineControls();
     initModals();
     loadOverviewData();
     initTelemetryChart();
@@ -245,6 +249,9 @@ function switchView(targetId) {
             loadSocAlerts();
         } else if (targetId === "topology-view") {
             loadNetworkTopology();
+        } else if (targetId === "investigations-view") {
+            loadInvestigations();
+            loadInvestigationTimeline();
         }
     }, 200);
 }
@@ -432,6 +439,7 @@ let _latestTelemetryPoint = null;
 let _telemetryMetricDirty = false;
 let _activeTelemetryMetric = "bandwidth";
 let _telemetryLastUpdated = "";
+let _hoverMouseX = null;
 
 function _metricPair(point, metric) {
     if (!point) return [0, 0];
@@ -593,8 +601,11 @@ function renderTelemetryChart() {
 
     const peak = Math.max(0, ...inValues, ...outValues);
     const floor = metric === "packets" ? 50 : metric === "latency" ? 5 : 8;
-    const targetMaxVal = Math.max(peak * 1.18, floor);
-    _currentDisplayMaxVal += (targetMaxVal - _currentDisplayMaxVal) * (1 - Math.exp(-dt * 3.5));
+    const rawTarget = Math.max(peak * 1.18, floor);
+    // Quantize target to nice round boundaries to prevent vertical jitter on minor fluctuations
+    const step = rawTarget > 1000 ? 200 : rawTarget > 200 ? 50 : rawTarget > 50 ? 10 : 5;
+    const targetMaxVal = Math.ceil(rawTarget / step) * step;
+    _currentDisplayMaxVal += (targetMaxVal - _currentDisplayMaxVal) * (1 - Math.exp(-dt * 2.5));
     const maxVal = Math.max(_currentDisplayMaxVal, floor);
     const minVal = 0;
 
@@ -688,6 +699,18 @@ function renderTelemetryChart() {
         ctx.beginPath();
         ctx.arc(lastX, lastOutY, 2.8, 0, Math.PI * 2);
         ctx.fill();
+    }
+
+    // Draw vertical crosshair guideline if inspecting
+    if (_hoverMouseX !== null) {
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.65)";
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(_hoverMouseX, 0);
+        ctx.lineTo(_hoverMouseX, height);
+        ctx.stroke();
+        ctx.setLineDash([]);
     }
 
     if (!telemetryPaused && !document.hidden) {
@@ -824,7 +847,7 @@ async function loadTelemetryGraph() {
         if (data.series.length > 0) {
             const metricElem = document.getElementById("telemetry-metric");
             const metric = metricElem ? metricElem.value : "bandwidth";
-            if (_currentDisplayInbound.length === 0) {
+            if (_telemetryBuffer.length === 0) {
                 initTelemetrySeriesFromData(data.series, metric);
             } else {
                 const latestPoint = data.series[data.series.length - 1];
@@ -1642,12 +1665,12 @@ function initForms() {
                 const res = await fetch("/api/integrity/verify", { method: "POST", body: formData });
                 const data = await res.json();
                 if (res.ok) {
-                    if (data.reference_hash) {
-                        if (data.match) {
-                            if (window.NetSentinelSound) window.NetSentinelSound.play("success");
-                        } else {
-                            if (window.NetSentinelSound) window.NetSentinelSound.play("error");
-                        }
+                    if (data.status === "VERIFIED" || (data.status === undefined && data.match)) {
+                        if (window.NetSentinelSound) window.NetSentinelSound.play("success");
+                    } else if (data.status === "TAMPERED_OR_MISMATCH" || (data.status === undefined && data.match === false)) {
+                        if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                    } else if (data.status === "UNREGISTERED") {
+                        if (window.NetSentinelSound) window.NetSentinelSound.play("warning");
                     } else {
                         if (window.NetSentinelSound) window.NetSentinelSound.play("success");
                     }
@@ -1659,23 +1682,43 @@ function initForms() {
 
                 let resultClass = "";
                 let statusHtml = "";
-                let statusIcon = "";
-                let statusLabel = "";
                 
-                if (data.reference_hash) {
-                    if (data.match) {
-                        resultClass = "result-success";
-                        statusIcon = '<i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i>';
-                        statusLabel = "Hash MATCHES trusted reference";
-                    } else {
-                        resultClass = "result-danger";
-                        statusIcon = '<i class="fa-solid fa-circle-xmark" style="color: var(--accent-rose);"></i>';
-                        statusLabel = "Hash MISMATCH with reference";
-                    }
+                if (data.status === "VERIFIED" || (data.status === undefined && data.match)) {
+                    resultClass = "result-success";
                     statusHtml = `
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);">
-                            ${statusIcon}
-                            <span class="badge ${data.match ? "badge-success" : "badge-danger"}">${statusLabel}</span>
+                            <i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i>
+                            <span class="badge badge-success">SHA-256 MATCH VERIFIED</span>
+                        </div>
+                    `;
+                } else if (data.status === "TAMPERED_OR_MISMATCH" || (data.status === undefined && data.match === false)) {
+                    resultClass = "result-danger";
+                    const expectedHash = data.baseline_hash || data.reference_hash || "N/A";
+                    statusHtml = `
+                        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fa-solid fa-triangle-exclamation" style="color: var(--accent-rose);"></i>
+                                <span class="badge badge-danger">HASH MISMATCH / INTEGRITY VIOLATION DETECTED</span>
+                            </div>
+                            <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 4px;">
+                                <strong>Current Hash:</strong> <code style="word-break: break-all; color: var(--accent-rose);">${escapeHtml(data.current_sha256)}</code><br/>
+                                <strong>Baseline Hash:</strong> <code style="word-break: break-all; color: var(--accent-emerald);">${escapeHtml(expectedHash)}</code>
+                            </div>
+                        </div>
+                    `;
+                } else if (data.status === "UNREGISTERED") {
+                    resultClass = "result-warning";
+                    statusHtml = `
+                        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fa-solid fa-circle-question" style="color: var(--accent-amber);"></i>
+                                <span class="badge badge-warning">UNREGISTERED FILE (No baseline recorded)</span>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-secondary register-baseline-btn" data-filename="${escapeHtml(data.filename)}" data-hash="${escapeHtml(data.current_sha256)}" style="margin-top: 4px; padding: 5px 12px; font-size: 0.8rem; background: var(--bg-surface-elevated); border: 1px solid var(--accent-amber); color: var(--accent-amber); cursor: pointer; border-radius: 4px;">
+                                    <i class="fa-solid fa-plus-circle"></i> Register as New Baseline
+                                </button>
+                            </div>
                         </div>
                     `;
                 } else {
@@ -1703,13 +1746,13 @@ function initForms() {
                             </button>
                         </code>
                     </div>
-                    ${data.reference_hash ? `<div style="margin-bottom: 8px;"><strong>Reference SHA-256:</strong> <code style="font-size: 0.82rem; word-break: break-all; color: var(--text-secondary);">${escapeHtml(data.reference_hash)}</code></div>` : ''}
+                    ${data.baseline_hash ? `<div style="margin-bottom: 8px;"><strong>Baseline SHA-256:</strong> <code style="font-size: 0.82rem; word-break: break-all; color: var(--text-secondary);">${escapeHtml(data.baseline_hash)}</code></div>` : (data.reference_hash ? `<div style="margin-bottom: 8px;"><strong>Reference SHA-256:</strong> <code style="font-size: 0.82rem; word-break: break-all; color: var(--text-secondary);">${escapeHtml(data.reference_hash)}</code></div>` : '')}
                     ${statusHtml}
                 `;
 
                 if (!box._hasCopyListener) {
                     box._hasCopyListener = true;
-                    box.addEventListener("click", (e) => {
+                    box.addEventListener("click", async (e) => {
                         const copyBtn = e.target.closest(".copy-hash-btn");
                         if (copyBtn) {
                             const hash = copyBtn.getAttribute("data-hash");
@@ -1718,6 +1761,42 @@ function initForms() {
                                     .then(() => showNotification("SHA-256 hash copied to clipboard", "success"))
                                     .catch(() => showNotification("Failed to copy hash", "error"));
                             }
+                            return;
+                        }
+
+                        const regBtn = e.target.closest(".register-baseline-btn");
+                        if (regBtn) {
+                            const fn = regBtn.getAttribute("data-filename");
+                            const sha = regBtn.getAttribute("data-hash");
+                            if (!fn || !sha) return;
+                            regBtn.disabled = true;
+                            regBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registering...';
+                            try {
+                                const regData = new URLSearchParams();
+                                regData.append("filename", fn);
+                                regData.append("sha256", sha);
+                                regData.append("notes", "Registered baseline via UI");
+                                const regRes = await fetch("/api/integrity/register", {
+                                    method: "POST",
+                                    body: regData
+                                });
+                                if (regRes.ok) {
+                                    if (window.NetSentinelSound) window.NetSentinelSound.play("success");
+                                    showNotification(`Registered baseline for ${fn}`, "success");
+                                    regBtn.parentElement.innerHTML = `<span class="badge badge-success"><i class="fa-solid fa-check"></i> Registered Baseline</span>`;
+                                    loadOverviewData();
+                                } else {
+                                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                                    showNotification("Failed to register baseline", "error");
+                                    regBtn.disabled = false;
+                                    regBtn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Register as New Baseline';
+                                }
+                            } catch (regErr) {
+                                if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                                showNotification("Error registering baseline", "error");
+                                regBtn.disabled = false;
+                                regBtn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Register as New Baseline';
+                            }
                         }
                     });
                 }
@@ -1725,6 +1804,71 @@ function initForms() {
                 showNotification("Integrity verification failed.", "error");
             }
         });
+
+        const regDirectBtn = document.getElementById("register-baseline-direct-btn");
+        if (regDirectBtn) {
+            regDirectBtn.addEventListener("click", async () => {
+                const fileInput = document.getElementById("integrity-file");
+                const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+                const refHash = (document.getElementById("integrity-ref").value || "").trim();
+
+                if (!file && !refHash) {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                    showNotification("Please select a file or enter a reference hash to register.", "error");
+                    return;
+                }
+
+                regDirectBtn.disabled = true;
+                const origHtml = regDirectBtn.innerHTML;
+                regDirectBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registering...';
+
+                try {
+                    let res;
+                    if (file) {
+                        const fd = new FormData();
+                        fd.append("file", file);
+                        fd.append("notes", "Registered baseline via UI");
+                        res = await fetch("/api/integrity/register", { method: "POST", body: fd });
+                    } else {
+                        const params = new URLSearchParams();
+                        params.append("filename", "manual_reference_hash");
+                        params.append("sha256", refHash);
+                        params.append("notes", "Registered reference hash via UI");
+                        res = await fetch("/api/integrity/register", { method: "POST", body: params });
+                    }
+
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        if (window.NetSentinelSound) window.NetSentinelSound.play("success");
+                        showNotification(`Registered baseline for ${data.filename}`, "success");
+                        loadOverviewData();
+
+                        const box = document.getElementById("integrity-result");
+                        if (box) {
+                            box.classList.remove("hidden");
+                            box.className = "result-box result-success";
+                            box.innerHTML = `
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i>
+                                    <span class="badge badge-success">BASELINE REGISTERED</span>
+                                </div>
+                                <div style="margin-bottom: 6px;"><strong>Filename:</strong> ${escapeHtml(data.filename)}</div>
+                                <div><strong>Registered SHA-256:</strong> <code style="font-size: 0.82rem; word-break: break-all; color: var(--accent-emerald);">${escapeHtml(data.sha256)}</code></div>
+                            `;
+                        }
+                    } else {
+                        if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                        showNotification(data.detail || "Failed to register baseline", "error");
+                    }
+                } catch (err) {
+                    if (window.NetSentinelSound) window.NetSentinelSound.play("error");
+                    showNotification("Request failed while registering baseline.", "error");
+                } finally {
+                    regDirectBtn.disabled = false;
+                    regDirectBtn.innerHTML = origHtml;
+                }
+            });
+        }
     }
 
     // New Investigation Modal Form
@@ -1750,6 +1894,7 @@ function initForms() {
                     if (window.NetSentinelSound) window.NetSentinelSound.play("success");
                     closeModal();
                     loadInvestigations();
+                    loadInvestigationTimeline();
                     loadOverviewData();
                     showNotification("Investigation case created successfully", "success");
                 } else {
@@ -2030,7 +2175,7 @@ async function loadDevices() {
         tbody.innerHTML = devices.map(dev => {
             const statusClass = dev.status === "Active" ? "badge-success" : dev.status === "Quarantined" ? "badge-danger" : "badge-warning";
             return `
-                <tr>
+                <tr class="device-row-clickable" data-device-id="${escapeHtml(dev.id)}" style="cursor: pointer;" title="Click to inspect device activity">
                     <td><code>${escapeHtml(dev.id)}</code></td>
                     <td><code>${escapeHtml(dev.ip_address || "N/A")}</code></td>
                     <td><code>${escapeHtml(dev.mac_address || "N/A")}</code></td>
@@ -2042,13 +2187,20 @@ async function loadDevices() {
             `;
         }).join("");
 
-        if (!tbody._hasDeleteListener) {
-            tbody._hasDeleteListener = true;
+        if (!tbody._hasClickListener) {
+            tbody._hasClickListener = true;
             tbody.addEventListener("click", (e) => {
-                const btn = e.target.closest(".delete-device-btn");
-                if (btn) {
-                    const id = btn.getAttribute("data-device-id");
+                const delBtn = e.target.closest(".delete-device-btn");
+                if (delBtn) {
+                    e.stopPropagation();
+                    const id = delBtn.getAttribute("data-device-id");
                     if (id) deleteDevice(id);
+                    return;
+                }
+                const row = e.target.closest(".device-row-clickable");
+                if (row) {
+                    const devId = row.getAttribute("data-device-id");
+                    if (devId) openDeviceInspector(devId);
                 }
             });
         }
@@ -2262,6 +2414,670 @@ function initGlobalSearch() {
     });
 }
 
+let _cmdSelectedIndex = 0;
+let _cmdSearchSeq = 0;
+let _cmdDebounceTimer = null;
+let _cmdRecentSearches = JSON.parse(localStorage.getItem("ns_cmd_recent") || "[]");
+let _currentCmdFilter = "all";
+
+const _cmdStaticPages = [
+    { id: "overview-view", title: "Overview Dashboard", sub: "Network telemetry and system summary", icon: "fa-chart-pie" },
+    { id: "analytics-view", title: "Security Analytics", sub: "Historical trends and threat activity", icon: "fa-chart-line" },
+    { id: "network-view", title: "Network Security", sub: "CSV log analysis and threat detection", icon: "fa-network-wired" },
+    { id: "live-collector-view", title: "Live Monitoring", sub: "Real-time Windows collector flow stream", icon: "fa-satellite-dish" },
+    { id: "devices-view", title: "Device Inventory", sub: "Registered endpoints and hardware metadata", icon: "fa-laptop-code" },
+    { id: "investigations-view", title: "Investigations", sub: "Digital forensics case management", icon: "fa-folder-open" },
+    { id: "soc-alerts-view", title: "SOC Alert Triage", sub: "Security alerts and heuristic detections", icon: "fa-shield-cat" },
+    { id: "topology-view", title: "Network Intelligence", sub: "Visual topology and traffic relationships", icon: "fa-project-diagram" },
+    { id: "stego-view", title: "Steganography Lab", sub: "Embed or extract covert payloads", icon: "fa-eye-slash" },
+    { id: "forensics-view", title: "Image Forensics", sub: "ELA, metadata, and anomaly analysis", icon: "fa-magnifying-glass-chart" },
+    { id: "integrity-view", title: "Integrity Verification", sub: "SHA-256 file baseline verification", icon: "fa-fingerprint" },
+    { id: "reports-view", title: "Reports & Export", sub: "Executive reporting and audit export", icon: "fa-file-contract" },
+    { id: "settings-view", title: "Settings", sub: "System configurations and audio settings", icon: "fa-gear" }
+];
+
+function initCommandPalette() {
+    const modal = document.getElementById("cmd-palette-modal");
+    const input = document.getElementById("cmd-palette-input");
+    const resultsContainer = document.getElementById("cmd-palette-results");
+    const searchTrigger = document.getElementById("search-box-trigger");
+    const closeBtn = document.getElementById("close-cmd-palette-btn");
+    if (!modal || !input || !resultsContainer) return;
+
+    function openCommandPalette() {
+        modal.classList.remove("hidden");
+        input.value = "";
+        _cmdSelectedIndex = 0;
+        renderCommandPaletteResults("");
+        setTimeout(() => input.focus(), 50);
+    }
+
+    function closeCommandPalette() {
+        modal.classList.add("hidden");
+        input.value = "";
+    }
+    window.closeCommandPalette = closeCommandPalette;
+
+    document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+            e.preventDefault();
+            if (modal.classList.contains("hidden")) {
+                openCommandPalette();
+            } else {
+                closeCommandPalette();
+            }
+        }
+    });
+
+    if (searchTrigger) {
+        searchTrigger.addEventListener("click", openCommandPalette);
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener("click", closeCommandPalette);
+    }
+
+    modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeCommandPalette();
+    });
+
+    document.querySelectorAll(".cmd-filter-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+            document.querySelectorAll(".cmd-filter-chip").forEach(c => c.classList.remove("active"));
+            chip.classList.add("active");
+            _currentCmdFilter = chip.getAttribute("data-filter") || "all";
+            renderCommandPaletteResults(input.value.trim());
+        });
+    });
+
+    input.addEventListener("input", () => {
+        if (_cmdDebounceTimer) clearTimeout(_cmdDebounceTimer);
+        _cmdDebounceTimer = setTimeout(() => {
+            renderCommandPaletteResults(input.value.trim());
+        }, 150);
+    });
+
+    input.addEventListener("keydown", (e) => {
+        const items = resultsContainer.querySelectorAll(".cmd-palette-item");
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            _cmdSelectedIndex = Math.min(_cmdSelectedIndex + 1, items.length - 1);
+            updateCmdSelection(items);
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            _cmdSelectedIndex = Math.max(_cmdSelectedIndex - 1, 0);
+            updateCmdSelection(items);
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (items[_cmdSelectedIndex]) {
+                items[_cmdSelectedIndex].click();
+            }
+        } else if (e.key === "Escape") {
+            closeCommandPalette();
+        }
+    });
+
+    function updateCmdSelection(items) {
+        items.forEach((item, idx) => {
+            if (idx === _cmdSelectedIndex) {
+                item.classList.add("selected");
+                item.scrollIntoView({ block: "nearest" });
+            } else {
+                item.classList.remove("selected");
+            }
+        });
+    }
+
+    async function renderCommandPaletteResults(query) {
+        const seq = ++_cmdSearchSeq;
+        let html = "";
+
+        // 1. Static pages matching query
+        if (_currentCmdFilter === "all" || _currentCmdFilter === "pages") {
+            const matchingPages = _cmdStaticPages.filter(p => 
+                !query || p.title.toLowerCase().includes(query.toLowerCase()) || p.sub.toLowerCase().includes(query.toLowerCase())
+            );
+            if (matchingPages.length > 0) {
+                html += `<div class="search-category-header" style="padding: 6px 20px; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Pages</div>`;
+                matchingPages.forEach(p => {
+                    html += `
+                        <div class="cmd-palette-item" data-action="navigate" data-target="${p.id}">
+                            <div class="cmd-item-left">
+                                <div class="cmd-item-icon"><i class="fa-solid ${p.icon}"></i></div>
+                                <div>
+                                    <div class="cmd-item-title">${escapeHtml(p.title)}</div>
+                                    <div class="cmd-item-sub">${escapeHtml(p.sub)}</div>
+                                </div>
+                            </div>
+                            <div class="cmd-item-badge">Page</div>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        // 2. Quick actions matching query
+        if (_currentCmdFilter === "all" || _currentCmdFilter === "actions") {
+            const actions = [
+                { title: "Start Attack Simulation", sub: "Trigger simulated threat scenario", icon: "fa-play", action: "attack" },
+                { title: "Reset Telemetry Baseline", sub: "Clear simulated attack state", icon: "fa-rotate-right", action: "reset" },
+                { title: "Export Audit Report", sub: "Download JSON forensic package", icon: "fa-download", action: "export" }
+            ].filter(a => !query || a.title.toLowerCase().includes(query.toLowerCase()));
+
+            if (actions.length > 0) {
+                html += `<div class="search-category-header" style="padding: 6px 20px; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Actions</div>`;
+                actions.forEach(a => {
+                    html += `
+                        <div class="cmd-palette-item" data-action="${a.action}">
+                            <div class="cmd-item-left">
+                                <div class="cmd-item-icon"><i class="fa-solid ${a.icon}"></i></div>
+                                <div>
+                                    <div class="cmd-item-title">${escapeHtml(a.title)}</div>
+                                    <div class="cmd-item-sub">${escapeHtml(a.sub)}</div>
+                                </div>
+                            </div>
+                            <div class="cmd-item-badge">Action</div>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        // 3. Dynamic search results (devices, alerts, cases)
+        if (query.length >= 2) {
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                if (seq !== _cmdSearchSeq) return;
+                if (res.ok) {
+                    const data = await res.json();
+                    const results = data.results || {};
+
+                    if ((_currentCmdFilter === "all" || _currentCmdFilter === "devices") && results.devices && results.devices.length > 0) {
+                        html += `<div class="search-category-header" style="padding: 6px 20px; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Devices</div>`;
+                        results.devices.slice(0, 5).forEach(dev => {
+                            html += `
+                                <div class="cmd-palette-item" data-action="inspect-device" data-device-id="${escapeHtml(dev.id)}">
+                                    <div class="cmd-item-left">
+                                        <div class="cmd-item-icon"><i class="fa-solid fa-server"></i></div>
+                                        <div>
+                                            <div class="cmd-item-title">${escapeHtml(dev.hostname || dev.ip_address || dev.id)}</div>
+                                            <div class="cmd-item-sub">${escapeHtml(dev.ip_address)} • ${escapeHtml(dev.status)}</div>
+                                        </div>
+                                    </div>
+                                    <div class="cmd-item-badge">Device</div>
+                                </div>
+                            `;
+                        });
+                    }
+
+                    if ((_currentCmdFilter === "all" || _currentCmdFilter === "alerts") && results.security_alerts && results.security_alerts.length > 0) {
+                        html += `<div class="search-category-header" style="padding: 6px 20px; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Security Alerts</div>`;
+                        results.security_alerts.slice(0, 5).forEach(alt => {
+                            html += `
+                                <div class="cmd-palette-item" data-action="navigate" data-target="soc-alerts-view">
+                                    <div class="cmd-item-left">
+                                        <div class="cmd-item-icon"><i class="fa-solid fa-triangle-exclamation" style="color: #f43f5e;"></i></div>
+                                        <div>
+                                            <div class="cmd-item-title">${escapeHtml(alt.title)}</div>
+                                            <div class="cmd-item-sub">${escapeHtml(alt.severity)} • ${escapeHtml(alt.source_ip || "N/A")}</div>
+                                        </div>
+                                    </div>
+                                    <div class="cmd-item-badge">Alert</div>
+                                </div>
+                            `;
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error("Command palette search error", err);
+            }
+        }
+
+        if (seq !== _cmdSearchSeq) return;
+
+        if (!html) {
+            html = `<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">No matching commands or records found.</div>`;
+        }
+
+        resultsContainer.innerHTML = html;
+        _cmdSelectedIndex = 0;
+        updateCmdSelection(resultsContainer.querySelectorAll(".cmd-palette-item"));
+
+        resultsContainer.querySelectorAll(".cmd-palette-item").forEach(item => {
+            item.addEventListener("click", () => {
+                const action = item.getAttribute("data-action");
+                const target = item.getAttribute("data-target");
+                const deviceId = item.getAttribute("data-device-id");
+
+                if (query) {
+                    _cmdRecentSearches = [query, ..._cmdRecentSearches.filter(q => q !== query)].slice(0, 5);
+                    localStorage.setItem("ns_cmd_recent", JSON.stringify(_cmdRecentSearches));
+                }
+
+                closeCommandPalette();
+
+                if (action === "navigate" && target) {
+                    switchView(target);
+                } else if (action === "inspect-device" && deviceId) {
+                    switchView("devices-view");
+                    setTimeout(() => openDeviceInspector(deviceId), 300);
+                } else if (action === "attack") {
+                    const btn = document.getElementById("telemetry-attack-btn");
+                    if (btn) btn.click();
+                } else if (action === "reset") {
+                    const btn = document.getElementById("telemetry-reset-btn");
+                    if (btn) btn.click();
+                } else if (action === "export") {
+                    const btn = document.getElementById("export-report-btn");
+                    if (btn) btn.click();
+                }
+            });
+        });
+    }
+}
+
+let _currentInspectedDeviceId = null;
+
+function initDeviceInspector() {
+    const closeBtn = document.getElementById("close-inspector-btn");
+    if (closeBtn) {
+        closeBtn.addEventListener("click", closeDeviceInspector);
+    }
+
+    const filterBtn = document.getElementById("inspect-filter-flows-btn");
+    if (filterBtn) {
+        filterBtn.addEventListener("click", () => {
+            closeDeviceInspector();
+            switchView("live-collector-view");
+        });
+    }
+
+    const caseBtn = document.getElementById("inspect-create-case-btn");
+    if (caseBtn) {
+        caseBtn.addEventListener("click", () => {
+            closeDeviceInspector();
+            switchView("investigations-view");
+            setTimeout(() => {
+                const modal = document.getElementById("investigation-modal");
+                if (modal) modal.classList.remove("hidden");
+            }, 300);
+        });
+    }
+}
+
+function closeDeviceInspector() {
+    const drawer = document.getElementById("device-inspector-drawer");
+    if (drawer) drawer.classList.add("hidden");
+    _currentInspectedDeviceId = null;
+}
+window.closeDeviceInspector = closeDeviceInspector;
+
+async function openDeviceInspector(deviceId) {
+    _currentInspectedDeviceId = deviceId;
+    const drawer = document.getElementById("device-inspector-drawer");
+    if (!drawer) return;
+    drawer.classList.remove("hidden");
+
+    try {
+        const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}/inspection`);
+        if (!res.ok) throw new Error("Failed to load device details");
+        const data = await res.json();
+        const dev = data.device || {};
+        const stats = data.traffic_stats || {};
+        const events = data.recent_events || [];
+        const alerts = data.associated_alerts || [];
+
+        const nameEl = document.getElementById("inspect-device-name");
+        if (nameEl) nameEl.textContent = dev.hostname || dev.id || "Unknown Device";
+        const ipEl = document.getElementById("inspect-device-ip");
+        if (ipEl) ipEl.textContent = dev.ip_address || "0.0.0.0";
+        const macEl = document.getElementById("inspect-device-mac");
+        if (macEl) macEl.textContent = dev.mac_address || "N/A";
+        const statusEl = document.getElementById("inspect-device-status");
+        if (statusEl) {
+            const statusClass = dev.status === "Active" ? "badge-success" : dev.status === "Quarantined" ? "badge-danger" : "badge-warning";
+            statusEl.innerHTML = `<span class="badge ${statusClass}">${escapeHtml(dev.status || "Unknown")}</span>`;
+        }
+        const sourceEl = document.getElementById("inspect-device-source");
+        if (sourceEl) sourceEl.textContent = dev.observation_source || "Unknown";
+        const lastSeenEl = document.getElementById("inspect-device-lastseen");
+        if (lastSeenEl) lastSeenEl.textContent = dev.last_seen || "N/A";
+
+        const flowsEl = document.getElementById("inspect-traffic-flows");
+        if (flowsEl) flowsEl.textContent = stats.total_flows || 0;
+        const pktsEl = document.getElementById("inspect-traffic-packets");
+        if (pktsEl) pktsEl.textContent = stats.total_packets || 0;
+        const bytesEl = document.getElementById("inspect-traffic-bytes");
+        if (bytesEl) {
+            const kb = ((stats.total_bytes || 0) / 1024).toFixed(1);
+            bytesEl.textContent = `${kb} KB`;
+        }
+
+        const connList = document.getElementById("inspect-connections-list");
+        if (connList) {
+            if (events.length === 0) {
+                connList.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); padding: 8px;">No connection events logged yet.</div>`;
+            } else {
+                connList.innerHTML = events.map(ev => `
+                    <div style="padding: 6px 10px; border-bottom: 1px solid #162032; font-size: 0.75rem; display: flex; justify-content: space-between;">
+                        <span><code>${escapeHtml(ev.src_ip)}:${escapeHtml(ev.src_port)}</code> &rarr; <code>${escapeHtml(ev.dst_ip)}:${escapeHtml(ev.dst_port)}</code></span>
+                        <span style="color: var(--text-muted);">${escapeHtml(ev.protocol)} • ${escapeHtml(ev.bytes)} B</span>
+                    </div>
+                `).join("");
+            }
+        }
+
+        const alertsList = document.getElementById("inspect-alerts-list");
+        if (alertsList) {
+            if (alerts.length === 0) {
+                alertsList.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted); padding: 8px;">Zero active threat detections.</div>`;
+            } else {
+                alertsList.innerHTML = alerts.map(alt => {
+                    const sev = (alt.severity || "MEDIUM").toUpperCase();
+                    const badgeClass = sev === "CRITICAL" || sev === "HIGH" ? "badge-danger" : sev === "MEDIUM" ? "badge-warning" : "badge-success";
+                    return `
+                        <div style="padding: 8px 10px; border-bottom: 1px solid #162032; font-size: 0.78rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <strong>${escapeHtml(alt.title)}</strong>
+                                <span class="badge ${badgeClass}">${sev}</span>
+                            </div>
+                            <div style="color: var(--text-muted); font-size: 0.72rem;">${escapeHtml(alt.detected_at)} • ${escapeHtml(alt.status)}</div>
+                        </div>
+                    `;
+                }).join("");
+            }
+        }
+    } catch (err) {
+        console.error("Device inspection error", err);
+        showNotification("Failed to load device inspection data", "error");
+    }
+}
+window.openDeviceInspector = openDeviceInspector;
+
+let _activeNotifications = [];
+let _notificationSoundEnabled = true;
+
+function initNotificationCenter() {
+    const bellBtn = document.getElementById("notification-bell-btn");
+    const drawer = document.getElementById("notification-center-drawer");
+    const clearBtn = document.getElementById("clear-notifications-btn");
+    const soundToggle = document.getElementById("notification-sound-toggle");
+    if (!bellBtn || !drawer) return;
+
+    bellBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        drawer.classList.toggle("hidden");
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!drawer.contains(e.target) && e.target !== bellBtn) {
+            drawer.classList.add("hidden");
+        }
+    });
+
+    if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+            _activeNotifications = [];
+            renderNotifications();
+        });
+    }
+
+    if (soundToggle) {
+        soundToggle.addEventListener("change", () => {
+            _notificationSoundEnabled = soundToggle.checked;
+            const icon = document.getElementById("sound-icon");
+            if (icon) {
+                icon.className = _notificationSoundEnabled ? "fa-solid fa-volume-high" : "fa-solid fa-volume-xmark";
+            }
+        });
+    }
+
+    setInterval(pollSecurityAlerts, 10000);
+}
+
+async function pollSecurityAlerts() {
+    try {
+        const res = await fetch("/api/soc/alerts?status=OPEN");
+        if (!res.ok) return;
+        const alerts = await res.json();
+        let hasNewCritical = false;
+
+        alerts.forEach(alt => {
+            if (!_activeNotifications.some(n => n.alert_id === alt.alert_id)) {
+                _activeNotifications.unshift(alt);
+                if (alt.severity === "CRITICAL" || alt.severity === "HIGH") {
+                    hasNewCritical = true;
+                }
+            }
+        });
+
+        if (hasNewCritical && _notificationSoundEnabled && window.NetSentinelSound) {
+            window.NetSentinelSound.play("alert");
+        }
+
+        renderNotifications();
+    } catch (err) {
+        console.error("Alert polling error", err);
+    }
+}
+
+function renderNotifications() {
+    const container = document.getElementById("notification-items-container");
+    const badge = document.getElementById("notification-badge");
+    if (!container) return;
+
+    const openCount = _activeNotifications.filter(n => n.status === "OPEN").length;
+    if (badge) {
+        badge.textContent = openCount;
+        badge.classList.toggle("hidden", openCount === 0);
+    }
+
+    if (_activeNotifications.length === 0) {
+        container.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.8rem;">No active security alerts</div>`;
+        return;
+    }
+
+    container.innerHTML = _activeNotifications.slice(0, 15).map(n => {
+        const sev = (n.severity || "MEDIUM").toUpperCase();
+        const badgeClass = sev === "CRITICAL" || sev === "HIGH" ? "badge-danger" : sev === "MEDIUM" ? "badge-warning" : "badge-success";
+        return `
+            <div class="notification-item">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="badge ${badgeClass}" style="font-size: 0.65rem;">${sev}</span>
+                    <span style="font-size: 0.68rem; color: var(--text-muted);">${escapeHtml(n.detected_at || "")}</span>
+                </div>
+                <div style="font-size: 0.82rem; font-weight: 600; color: #fff; margin-top: 4px;">${escapeHtml(n.title)}</div>
+                <div style="font-size: 0.72rem; color: var(--text-secondary);">Source: <code>${escapeHtml(n.source_ip || "N/A")}</code></div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                    <button type="button" class="btn btn-sm btn-secondary notif-ack-btn" data-alert-id="${escapeHtml(n.alert_id)}" style="padding: 2px 8px; font-size: 0.68rem;">Acknowledge</button>
+                    <button type="button" class="btn btn-sm btn-primary notif-investigate-btn" data-alert-id="${escapeHtml(n.alert_id)}" style="padding: 2px 8px; font-size: 0.68rem;">Investigate</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    container.querySelectorAll(".notif-ack-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            const alertId = btn.getAttribute("data-alert-id");
+            await triageSocAlert(alertId, "ACKNOWLEDGED");
+            _activeNotifications = _activeNotifications.filter(n => n.alert_id !== alertId);
+            renderNotifications();
+        });
+    });
+
+    container.querySelectorAll(".notif-investigate-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const drawer = document.getElementById("notification-center-drawer");
+            if (drawer) drawer.classList.add("hidden");
+            switchView("soc-alerts-view");
+        });
+    });
+}
+
+function initTelemetryCrosshair() {
+    const canvas = document.getElementById("telemetry-canvas");
+    const tooltip = document.getElementById("telemetry-hover-tooltip");
+    if (!canvas || !tooltip) return;
+
+    canvas.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        _hoverMouseX = x;
+
+        if (_telemetryBuffer.length === 0) return;
+
+        const width = rect.width;
+        const stepX = width / Math.max(_telemetryBuffer.length - 1, 1);
+        const idx = Math.round((x + _scrollOffset * stepX) / stepX);
+        const clampedIdx = Math.max(0, Math.min(idx, _telemetryBuffer.length - 1));
+        const point = _telemetryBuffer[clampedIdx];
+
+        if (point) {
+            tooltip.classList.remove("hidden");
+            tooltip.style.left = `${Math.min(x + 12, width - 160)}px`;
+            tooltip.style.top = `${Math.max(y - 60, 8)}px`;
+            tooltip.innerHTML = `
+                <div style="color: var(--text-muted); margin-bottom: 4px;">${escapeHtml(point.timestamp || "Live")}</div>
+                <div style="color: #10b981;">Inbound: ${Number(point.inbound || 0).toFixed(1)}</div>
+                <div style="color: #38bdf8;">Outbound: ${Number(point.outbound || 0).toFixed(1)}</div>
+            `;
+        }
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+        _hoverMouseX = null;
+        tooltip.classList.add("hidden");
+    });
+}
+
+let _timelineFilter = "all";
+let _timelineEvents = [];
+
+function initTimelineControls() {
+    document.querySelectorAll(".timeline-filter-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".timeline-filter-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            _timelineFilter = btn.getAttribute("data-filter") || "all";
+            renderInvestigationTimeline();
+        });
+    });
+
+    const replayBtn = document.getElementById("replay-timeline-btn");
+    if (replayBtn) {
+        replayBtn.addEventListener("click", replayTimeline);
+    }
+}
+
+async function loadInvestigationTimeline() {
+    const rail = document.getElementById("investigation-timeline-rail");
+    if (!rail) return;
+    try {
+        const res = await fetch("/api/soc/cases");
+        if (!res.ok) throw new Error("Failed to load cases");
+        const cases = await res.json();
+        _timelineEvents = [];
+        cases.forEach(c => {
+            if (c.timeline && Array.isArray(c.timeline)) {
+                c.timeline.forEach(ev => {
+                    _timelineEvents.push({
+                        ...ev,
+                        case_title: c.title,
+                        case_id: c.case_id
+                    });
+                });
+            }
+        });
+
+        // If timeline events are empty after loading SOC cases, fetch /api/investigations to build synthetic events
+        if (_timelineEvents.length === 0) {
+            try {
+                const invRes = await fetch("/api/investigations");
+                if (invRes.ok) {
+                    const investigations = await invRes.json();
+                    if (Array.isArray(investigations)) {
+                        investigations.forEach(inv => {
+                            _timelineEvents.push({
+                                event_id: inv.id,
+                                case_id: inv.id,
+                                case_title: inv.title,
+                                timestamp: inv.created_at || new Date().toISOString(),
+                                actor: "Investigator",
+                                action: `Investigation case ${inv.id} created: ${inv.title}`,
+                                artifact_ref: inv.case_ref || inv.id
+                            });
+                        });
+                    }
+                }
+            } catch (invErr) {
+                console.warn("Fallback investigations fetch failed", invErr);
+            }
+        }
+
+        _timelineEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        renderInvestigationTimeline();
+    } catch (err) {
+        console.error("Timeline load error", err);
+        rail.innerHTML = `<div style="padding: 16px; color: var(--text-secondary); font-size: 0.85rem;">Unable to load timeline.</div>`;
+    }
+}
+
+function renderInvestigationTimeline() {
+    const rail = document.getElementById("investigation-timeline-rail");
+    if (!rail) return;
+
+    const filtered = _timelineEvents.filter(ev => {
+        if (_timelineFilter === "all") return true;
+        const action = (ev.action || "").toLowerCase();
+        if (_timelineFilter === "alerts") return action.includes("alert") || action.includes("threat");
+        if (_timelineFilter === "artifacts") return action.includes("hash") || action.includes("forensic") || action.includes("artifact");
+        if (_timelineFilter === "actions") return action.includes("created") || action.includes("analyst") || action.includes("action");
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        rail.innerHTML = `<div style="padding: 16px; color: var(--text-secondary); font-size: 0.85rem; font-style: italic;">No timeline events match the selected filter.</div>`;
+        return;
+    }
+
+    rail.innerHTML = filtered.map((ev, idx) => `
+        <div class="timeline-node" style="animation-delay: ${idx * 40}ms;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <strong style="font-size: 0.85rem; color: #fff;">${escapeHtml(ev.action)}</strong>
+                <span style="font-size: 0.7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">${escapeHtml(ev.timestamp || "")}</span>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                Case: <code>${escapeHtml(ev.case_id)}</code> • Actor: ${escapeHtml(ev.actor || "System")}
+            </div>
+            ${ev.artifact_ref ? `<div style="font-size: 0.72rem; color: var(--accent-cyan); margin-top: 4px;">Ref: ${escapeHtml(ev.artifact_ref)}</div>` : ""}
+        </div>
+    `).join("");
+}
+
+async function replayTimeline() {
+    const rail = document.getElementById("investigation-timeline-rail");
+    if (!rail || _timelineEvents.length === 0) return;
+    rail.innerHTML = "";
+    const sorted = [..._timelineEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    for (let i = 0; i < sorted.length; i++) {
+        const ev = sorted[i];
+        const node = document.createElement("div");
+        node.className = "timeline-node";
+        node.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <strong style="font-size: 0.85rem; color: #fff;">${escapeHtml(ev.action)}</strong>
+                <span style="font-size: 0.7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">${escapeHtml(ev.timestamp || "")}</span>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                Case: <code>${escapeHtml(ev.case_id)}</code> • Actor: ${escapeHtml(ev.actor || "System")}
+            </div>
+        `;
+        rail.appendChild(node);
+        await new Promise(r => setTimeout(r, 400));
+    }
+}
+
 function initModals() {
     const deviceModal = document.getElementById("device-modal");
     if (deviceModal) {
@@ -2277,10 +3093,29 @@ function initModals() {
         });
     }
 
+    const cmdModal = document.getElementById("cmd-palette-modal");
+    if (cmdModal) {
+        cmdModal.addEventListener("click", (e) => {
+            if (e.target === cmdModal) closeCommandPalette();
+        });
+    }
+
+    const closeCmdBtn = document.getElementById("close-cmd-palette-btn");
+    if (closeCmdBtn) {
+        closeCmdBtn.addEventListener("click", closeCommandPalette);
+    }
+
+    const closeInspectBtn = document.getElementById("close-inspector-btn");
+    if (closeInspectBtn) {
+        closeInspectBtn.addEventListener("click", closeDeviceInspector);
+    }
+
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
             closeModal();
             closeDeviceModal();
+            closeCommandPalette();
+            closeDeviceInspector();
         }
     });
 }
@@ -2362,9 +3197,9 @@ async function setAnalyticsRange(range) {
     // Update active button state
     document.querySelectorAll(".analytics-range-btn").forEach(btn => {
         if (btn.getAttribute("data-range") === range) {
-            btn.className = "analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all bg-[#1c2944] text-white border border-[#38bdf8]/40 shadow-sm";
+            btn.className = "analytics-range-btn btn btn-sm btn-secondary active font-semibold";
         } else {
-            btn.className = "analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white";
+            btn.className = "analytics-range-btn btn btn-sm btn-secondary font-semibold";
         }
     });
 

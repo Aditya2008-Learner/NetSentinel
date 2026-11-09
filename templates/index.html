@@ -96,10 +96,32 @@
                     <span id="current-page-title">Overview Dashboard</span>
                 </div>
                 <div class="top-nav-right">
-                    <div class="search-box" style="position: relative;">
+                    <div class="search-box" style="position: relative; cursor: pointer;" id="search-box-trigger" title="Press Ctrl+K to open Command Palette">
                         <i class="fa-solid fa-search"></i>
-                        <input type="text" placeholder="Search investigations, hashes..." id="global-search" />
+                        <input type="text" placeholder="Search devices, alerts, pages... (Ctrl+K)" id="global-search" readonly style="cursor: pointer;" />
+                        <kbd class="cmd-kbd-hint">Ctrl K</kbd>
                         <div id="search-results-dropdown" class="search-results-dropdown hidden"></div>
+                    </div>
+                    <div style="position: relative;">
+                        <button type="button" class="btn btn-secondary" id="notification-bell-btn" title="Live Incident Notifications" aria-label="Incident Notifications" style="padding: 7px 12px; position: relative;">
+                            <i class="fa-regular fa-bell"></i>
+                            <span class="notification-badge hidden" id="notification-badge">0</span>
+                        </button>
+                        <div id="notification-center-drawer" class="notification-drawer hidden">
+                            <div class="notification-header">
+                                <span style="font-weight: 700; font-size: 0.85rem;"><i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i> Live Incidents</span>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <label class="sound-toggle-label" title="Toggle Audio Alert Chimes" style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--text-muted);">
+                                        <input type="checkbox" id="notification-sound-toggle" checked style="accent-color: var(--accent-emerald);" />
+                                        <i class="fa-solid fa-volume-high" id="sound-icon"></i>
+                                    </label>
+                                    <button type="button" class="btn-text" id="clear-notifications-btn" style="background: none; border: none; font-size: 0.72rem; color: var(--text-muted); cursor: pointer;">Clear All</button>
+                                </div>
+                            </div>
+                            <div id="notification-items-container" class="notification-items-list">
+                                <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.8rem;">No active security alerts</div>
+                            </div>
+                        </div>
                     </div>
                     <div class="system-status">
                         <span class="pulse-dot"></span> Agent: Standalone
@@ -251,7 +273,10 @@
                                     <span style="width: 10px; height: 3px; background-color: #82A8C8; border-radius: 2px;"></span> Outbound
                                 </span>
                             </div>
-                            <canvas id="telemetry-canvas" style="width: 100%; height: 180px; display: block;"></canvas>
+                            <div style="position: relative;">
+                                <canvas id="telemetry-canvas" style="width: 100%; height: 180px; display: block; cursor: crosshair;"></canvas>
+                                <div id="telemetry-hover-tooltip" class="chart-crosshair-tooltip hidden"></div>
+                            </div>
                             <div class="time-axis-labels" id="telemetry-time-axis">
                                 <span>-60m</span>
                                 <span>-45m</span>
@@ -266,23 +291,23 @@
                 <!-- 1B. NETWORK SECURITY ANALYTICS OVERVIEW -->
                 <section id="analytics-view" class="view-panel">
                     <!-- Section Header -->
-                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 mb-6 border-b border-[#1e293b] gap-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 mb-6 border-b border-subtle gap-4">
                         <div>
                             <div class="flex items-center gap-2">
-                                <h1 class="text-2xl font-bold tracking-tight text-white">Network Security Analytics</h1>
-                                <span class="text-xs px-2 py-0.5 rounded font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">ENTERPRISE SOC</span>
+                                <h1 class="text-2xl font-bold tracking-tight text-primary">Network Security Analytics</h1>
+                                <span class="badge badge-success font-mono font-semibold" style="font-size: 0.68rem; letter-spacing: 0.08em;">ENTERPRISE SOC</span>
                             </div>
-                            <p id="analytics-subline" class="text-sm text-slate-400 mt-1 font-normal">Last 24 hours compared with the previous 24 hours.</p>
+                            <p id="analytics-subline" class="text-sm text-secondary mt-1 font-normal">Last 24 hours compared with the previous 24 hours.</p>
                         </div>
                         <div class="flex items-center gap-3">
-                            <div class="inline-flex rounded-lg p-1 bg-[#090e1c] border border-[#26354f]">
-                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all bg-[#1c2944] text-white border border-[#38bdf8]/40 shadow-sm" data-range="24H">24H</button>
-                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="7D">7D</button>
-                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="30D">30D</button>
-                                <button type="button" class="analytics-range-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white" data-range="90D">90D</button>
+                            <div class="inline-flex rounded-lg p-1 bg-surface-inset border-default">
+                                <button type="button" class="analytics-range-btn btn btn-sm btn-secondary active font-semibold" data-range="24H">24H</button>
+                                <button type="button" class="analytics-range-btn btn btn-sm btn-secondary font-semibold" data-range="7D">7D</button>
+                                <button type="button" class="analytics-range-btn btn btn-sm btn-secondary font-semibold" data-range="30D">30D</button>
+                                <button type="button" class="analytics-range-btn btn btn-sm btn-secondary font-semibold" data-range="90D">90D</button>
                             </div>
-                            <button type="button" id="export-analytics-btn" class="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[#0f172a] hover:bg-[#1c2944] text-slate-200 border border-[#26354f] hover:border-[#3b5074] transition-all shadow-sm">
-                                <i class="fa-solid fa-download text-emerald-400"></i>
+                            <button type="button" id="export-analytics-btn" class="btn btn-sm btn-secondary">
+                                <i class="fa-solid fa-download" style="color: var(--primary-accent);"></i>
                                 <span>Export Report</span>
                             </button>
                         </div>
@@ -291,103 +316,103 @@
                     <!-- Four Responsive Rounded-XL Metric Cards -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
                         <!-- Card 1: Network Throughput -->
-                        <div class="bg-[#151f34] border border-[#26354f] hover:border-[#3b5074] rounded-xl p-5 shadow-lg transition-all">
+                        <div class="card analytics-metric-card p-5 mb-0">
                             <div class="flex justify-between items-start">
-                                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Network Throughput</span>
-                                <span id="m-tp-pill" class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                <span class="text-xs font-semibold text-muted uppercase tracking-wider">Network Throughput</span>
+                                <span id="m-tp-pill" class="badge badge-success font-mono font-bold" style="font-size: 11px;">
                                     <i class="fa-solid fa-arrow-trend-up text-[9px]"></i> +5.2%
                                 </span>
                             </div>
                             <div class="mt-3 flex items-baseline gap-1.5">
-                                <span id="m-tp-val" class="text-3xl font-extrabold text-white font-mono tracking-tight">34.2</span>
-                                <span class="text-sm font-semibold text-slate-400">Mbps</span>
+                                <span id="m-tp-val" class="text-3xl font-extrabold text-primary font-mono tracking-tight">34.2</span>
+                                <span class="text-sm font-semibold text-secondary">Mbps</span>
                             </div>
-                            <div class="mt-4 pt-3 border-t border-[#1e293b]/70 flex items-end justify-between h-10 gap-1.5" id="m-tp-chart">
+                            <div class="mt-4 pt-3 border-t border-subtle flex items-end justify-between h-10 gap-1.5" id="m-tp-chart">
                                 <!-- 12 mini chart bars populated by JS -->
                             </div>
                         </div>
 
                         <!-- Card 2: Threat Events -->
-                        <div class="bg-[#151f34] border border-[#26354f] hover:border-[#3b5074] rounded-xl p-5 shadow-lg transition-all">
+                        <div class="card analytics-metric-card p-5 mb-0">
                             <div class="flex justify-between items-start">
-                                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Threat Events</span>
-                                <span id="m-threat-pill" class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                                <span class="text-xs font-semibold text-muted uppercase tracking-wider">Threat Events</span>
+                                <span id="m-threat-pill" class="badge badge-danger font-mono font-bold" style="font-size: 11px;">
                                     <i class="fa-solid fa-arrow-trend-up text-[9px]"></i> +14.2%
                                 </span>
                             </div>
                             <div class="mt-3 flex items-baseline gap-1.5">
-                                <span id="m-threat-val" class="text-3xl font-extrabold text-white font-mono tracking-tight">14</span>
-                                <span class="text-sm font-semibold text-slate-400">events</span>
+                                <span id="m-threat-val" class="text-3xl font-extrabold text-primary font-mono tracking-tight">14</span>
+                                <span class="text-sm font-semibold text-secondary">events</span>
                             </div>
-                            <div class="mt-4 pt-3 border-t border-[#1e293b]/70 flex items-end justify-between h-10 gap-1.5" id="m-threat-chart">
+                            <div class="mt-4 pt-3 border-t border-subtle flex items-end justify-between h-10 gap-1.5" id="m-threat-chart">
                                 <!-- 12 mini chart bars populated by JS -->
                             </div>
                         </div>
 
                         <!-- Card 3: Active Hosts -->
-                        <div class="bg-[#151f34] border border-[#26354f] hover:border-[#3b5074] rounded-xl p-5 shadow-lg transition-all">
+                        <div class="card analytics-metric-card p-5 mb-0">
                             <div class="flex justify-between items-start">
-                                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Hosts</span>
-                                <span id="m-hosts-pill" class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                <span class="text-xs font-semibold text-muted uppercase tracking-wider">Active Hosts</span>
+                                <span id="m-hosts-pill" class="badge badge-success font-mono font-bold" style="font-size: 11px;">
                                     <i class="fa-solid fa-arrow-up text-[9px]"></i> +4 hosts
                                 </span>
                             </div>
                             <div class="mt-3 flex items-baseline gap-1.5">
-                                <span id="m-hosts-val" class="text-3xl font-extrabold text-white font-mono tracking-tight">48</span>
-                                <span class="text-sm font-semibold text-slate-400">endpoints</span>
+                                <span id="m-hosts-val" class="text-3xl font-extrabold text-primary font-mono tracking-tight">48</span>
+                                <span class="text-sm font-semibold text-secondary">endpoints</span>
                             </div>
-                            <div class="mt-4 pt-3 border-t border-[#1e293b]/70 flex items-end justify-between h-10 gap-1.5" id="m-hosts-chart">
+                            <div class="mt-4 pt-3 border-t border-subtle flex items-end justify-between h-10 gap-1.5" id="m-hosts-chart">
                                 <!-- 12 mini chart bars populated by JS -->
                             </div>
                         </div>
 
                         <!-- Card 4: Average Latency -->
-                        <div class="bg-[#151f34] border border-[#26354f] hover:border-[#3b5074] rounded-xl p-5 shadow-lg transition-all">
+                        <div class="card analytics-metric-card p-5 mb-0">
                             <div class="flex justify-between items-start">
-                                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Average Latency</span>
-                                <span id="m-lat-pill" class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                <span class="text-xs font-semibold text-muted uppercase tracking-wider">Average Latency</span>
+                                <span id="m-lat-pill" class="badge badge-success font-mono font-bold" style="font-size: 11px;">
                                     <i class="fa-solid fa-arrow-down text-[9px]"></i> -1.2 ms
                                 </span>
                             </div>
                             <div class="mt-3 flex items-baseline gap-1.5">
-                                <span id="m-lat-val" class="text-3xl font-extrabold text-white font-mono tracking-tight">18.4</span>
-                                <span class="text-sm font-semibold text-slate-400">ms</span>
+                                <span id="m-lat-val" class="text-3xl font-extrabold text-primary font-mono tracking-tight">18.4</span>
+                                <span class="text-sm font-semibold text-secondary">ms</span>
                             </div>
-                            <div class="mt-4 pt-3 border-t border-[#1e293b]/70 flex items-end justify-between h-10 gap-1.5" id="m-lat-chart">
+                            <div class="mt-4 pt-3 border-t border-subtle flex items-end justify-between h-10 gap-1.5" id="m-lat-chart">
                                 <!-- 12 mini chart bars populated by JS -->
                             </div>
                         </div>
                     </div>
 
                     <!-- Wide Main Network Traffic & Threat Activity Chart Card -->
-                    <div class="bg-[#151f34] border border-[#26354f] rounded-xl p-6 shadow-xl mb-6">
+                    <div class="card p-6 mb-6">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
                             <div>
-                                <h2 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                                    <i class="fa-solid fa-wave-square text-emerald-400"></i>
+                                <h2 class="text-lg font-bold text-primary tracking-tight flex items-center gap-2">
+                                    <i class="fa-solid fa-wave-square" style="color: var(--primary-accent);"></i>
                                     <span>Network Traffic & Threat Activity</span>
                                 </h2>
-                                <p id="analytics-chart-subtitle" class="text-xs text-slate-400 mt-0.5">Bi-directional throughput with temporal threat correlation over selected window.</p>
+                                <p id="analytics-chart-subtitle" class="text-xs text-secondary mt-0.5">Bi-directional throughput with temporal threat correlation over selected window.</p>
                             </div>
-                            <div class="flex items-center gap-4 text-xs font-medium text-slate-300">
+                            <div class="flex items-center gap-4 text-xs font-medium text-secondary">
                                 <div class="flex items-center gap-2">
-                                    <span class="w-3 h-3 rounded-sm bg-emerald-500"></span>
+                                    <span class="w-3 h-3 rounded-sm" style="background-color: var(--primary-accent);"></span>
                                     <span>Inbound (Mbps)</span>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <span class="w-3 h-3 rounded-sm bg-sky-400"></span>
+                                    <span class="w-3 h-3 rounded-sm" style="background-color: var(--info);"></span>
                                     <span>Outbound (Mbps)</span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Technical SVG Responsive Area Chart -->
-                        <div class="relative w-full h-64 bg-[#090e1c] border border-[#1e293b] rounded-lg p-4">
+                        <div class="relative w-full h-64 bg-surface-inset border-default rounded-lg p-4">
                             <svg id="analytics-svg-chart" class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 200">
                                 <!-- Dynamic SVG chart rendered by JS -->
                             </svg>
                         </div>
-                        <div class="flex justify-between items-center text-[11px] font-mono text-slate-400 mt-2 px-1" id="analytics-axis-labels">
+                        <div class="flex justify-between items-center text-[11px] font-mono text-muted mt-2 px-1" id="analytics-axis-labels">
                             <!-- Axis time marks populated by JS -->
                         </div>
                     </div>
@@ -635,6 +660,28 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Chronological Investigation Timeline -->
+                    <div class="card" style="margin-top: 24px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h3 style="margin: 0; font-size: 1rem;"><i class="fa-solid fa-timeline" style="color: var(--accent-emerald); margin-right: 8px;"></i> Chronological Evidence Timeline</h3>
+                                <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 4px 0 0 0;">Historical event progression, forensic artifacts, and analyst actions.</p>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div class="timeline-filter-chips" id="timeline-filters">
+                                    <button type="button" class="timeline-filter-btn active" data-filter="all">All</button>
+                                    <button type="button" class="timeline-filter-btn" data-filter="alerts">Alerts</button>
+                                    <button type="button" class="timeline-filter-btn" data-filter="artifacts">Forensics</button>
+                                    <button type="button" class="timeline-filter-btn" data-filter="actions">Actions</button>
+                                </div>
+                                <button type="button" class="btn btn-secondary" id="replay-timeline-btn" title="Replay recorded events chronologically" style="padding: 4px 10px; font-size: 0.75rem;"><i class="fa-solid fa-play"></i> Replay</button>
+                            </div>
+                        </div>
+                        <div id="investigation-timeline-rail" class="investigation-timeline-rail">
+                            <div style="padding: 16px; color: var(--text-secondary); font-size: 0.85rem; font-style: italic;">Loading timeline events...</div>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- 5. STEGANOGRAPHY LAB VIEW -->
@@ -743,9 +790,14 @@
                                 <label>Trusted Reference Hash (SHA-256, Optional)</label>
                                 <input type="text" id="integrity-ref" placeholder="e.g. e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" />
                             </div>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fa-solid fa-shield-halved"></i> Verify Hash & Baseline
-                            </button>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fa-solid fa-shield-halved"></i> Verify Hash & Baseline
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="register-baseline-direct-btn">
+                                    <i class="fa-solid fa-plus-circle" style="color: var(--primary-accent);"></i> Register Baseline
+                                </button>
+                            </div>
                         </form>
                         <div id="integrity-result" class="result-box hidden"></div>
                     </div>
@@ -791,7 +843,7 @@
                             <button class="btn btn-primary" id="refresh-soc-alerts-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh Queue</button>
                         </div>
                     </div>
-                    <div class="table-container bg-[#151f34] border border-[#26354f] rounded-xl p-5 shadow-lg">
+                    <div class="table-container card p-5 mb-6">
                         <table id="soc-alerts-table" class="w-full text-left border-collapse">
                             <thead>
                                 <tr style="border-bottom: 1px solid var(--border-default); color: var(--text-secondary); font-size: 0.8rem;">
@@ -820,7 +872,7 @@
                             <button class="btn btn-primary" id="refresh-topology-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh Topology</button>
                         </div>
                     </div>
-                    <div class="bg-[#151f34] border border-[#26354f] rounded-xl p-6 shadow-lg">
+                    <div class="card p-6 mb-6">
                         <div id="topology-container" style="width: 100%; height: 400px; background: var(--bg-surface-inset); border-radius: 8px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
                             <canvas id="topology-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
                         </div>
@@ -1003,6 +1055,109 @@
                     <button type="submit" class="btn btn-primary">Save Device</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Global Command Palette Modal (Ctrl + K) -->
+    <div id="cmd-palette-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Command Palette">
+        <div class="cmd-palette-content">
+            <div class="cmd-palette-header">
+                <i class="fa-solid fa-magnifying-glass cmd-palette-icon"></i>
+                <input type="text" id="cmd-palette-input" placeholder="Type a command or search devices, IPs, alerts, pages..." autocomplete="off" spellcheck="false" />
+                <button type="button" class="cmd-palette-esc-btn" id="close-cmd-palette-btn">ESC</button>
+            </div>
+            <div class="cmd-palette-tags" id="cmd-palette-tags">
+                <button type="button" class="cmd-filter-chip active" data-filter="all">All</button>
+                <button type="button" class="cmd-filter-chip" data-filter="pages">Pages</button>
+                <button type="button" class="cmd-filter-chip" data-filter="devices">Devices</button>
+                <button type="button" class="cmd-filter-chip" data-filter="alerts">Alerts</button>
+                <button type="button" class="cmd-filter-chip" data-filter="actions">Actions</button>
+            </div>
+            <div class="cmd-palette-body" id="cmd-palette-results">
+                <!-- Populated dynamically -->
+            </div>
+            <div class="cmd-palette-footer">
+                <div class="cmd-footer-hint"><span>&uarr; &darr;</span> Navigate</div>
+                <div class="cmd-footer-hint"><span>&crarr;</span> Select</div>
+                <div class="cmd-footer-hint"><span>ESC</span> Close</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Inspection Side Panel -->
+    <div id="device-inspector-drawer" class="inspector-drawer hidden" role="dialog" aria-label="Device Inspector">
+        <div class="inspector-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <i class="fa-solid fa-server" style="color: var(--accent-emerald);"></i>
+                <div>
+                    <h3 id="inspect-device-name" style="margin: 0; font-size: 1rem; color: #fff;">Device Inspection</h3>
+                    <span id="inspect-device-ip" style="font-size: 0.75rem; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace;">0.0.0.0</span>
+                </div>
+            </div>
+            <button type="button" class="modal-close" id="close-inspector-btn">&times;</button>
+        </div>
+        <div class="inspector-body">
+            <!-- Metadata Section -->
+            <div class="inspector-section">
+                <h4 class="inspector-section-title">Hardware &amp; Identification</h4>
+                <div class="inspector-grid">
+                    <div class="inspector-field">
+                        <span class="field-label">MAC Address</span>
+                        <span class="field-val" id="inspect-device-mac">-</span>
+                    </div>
+                    <div class="inspector-field">
+                        <span class="field-label">Status</span>
+                        <span class="field-val" id="inspect-device-status"><span class="badge badge-success">Active</span></span>
+                    </div>
+                    <div class="inspector-field">
+                        <span class="field-label">Observation Source</span>
+                        <span class="field-val" id="inspect-device-source">-</span>
+                    </div>
+                    <div class="inspector-field">
+                        <span class="field-label">Last Seen</span>
+                        <span class="field-val" id="inspect-device-lastseen">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real Traffic Statistics -->
+            <div class="inspector-section">
+                <h4 class="inspector-section-title">Telemetry &amp; Activity Metrics</h4>
+                <div class="inspector-stats-row">
+                    <div class="inspector-stat-card">
+                        <span class="stat-number" id="inspect-traffic-flows">0</span>
+                        <span class="stat-lbl">Active Flows</span>
+                    </div>
+                    <div class="inspector-stat-card">
+                        <span class="stat-number" id="inspect-traffic-packets">0</span>
+                        <span class="stat-lbl">Observed Packets</span>
+                    </div>
+                    <div class="inspector-stat-card">
+                        <span class="stat-number" id="inspect-traffic-bytes">0 KB</span>
+                        <span class="stat-lbl">Total Volume</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Connection Events -->
+            <div class="inspector-section">
+                <h4 class="inspector-section-title">Recent Connections</h4>
+                <div id="inspect-connections-list" class="inspector-events-list">
+                    <div style="font-size: 0.8rem; color: var(--text-muted); padding: 8px;">No connection events logged yet.</div>
+                </div>
+            </div>
+
+            <!-- Associated Security Alerts -->
+            <div class="inspector-section">
+                <h4 class="inspector-section-title">Associated Security Alerts</h4>
+                <div id="inspect-alerts-list" class="inspector-events-list">
+                    <div style="font-size: 0.8rem; color: var(--text-muted); padding: 8px;">Zero active threat detections.</div>
+                </div>
+            </div>
+        </div>
+        <div class="inspector-footer">
+            <button type="button" class="btn btn-secondary" id="inspect-filter-flows-btn" style="flex: 1;"><i class="fa-solid fa-filter"></i> View Flows</button>
+            <button type="button" class="btn btn-primary" id="inspect-create-case-btn" style="flex: 1;"><i class="fa-solid fa-folder-plus"></i> Open Case</button>
         </div>
     </div>
 
