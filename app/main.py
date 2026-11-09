@@ -19,7 +19,7 @@ from typing import List, Literal, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
@@ -35,6 +35,24 @@ from .stego_service import (
     embed_secret_in_image,
     extract_secret_from_bytes,
     analyze_image_forensics_from_bytes,
+)
+from .demo_service import (
+    get_demo_state,
+    update_demo_state,
+    reset_demo_state,
+    get_demo_telemetry,
+    get_demo_devices,
+    get_demo_flows,
+    get_demo_alerts,
+    triage_demo_alert,
+    get_demo_cases,
+    get_demo_threat_intel,
+    get_demo_system_health,
+    get_demo_csv_text,
+    get_demo_carrier_image,
+    get_demo_stego_image,
+    get_demo_baseline_files,
+    generate_demo_pdf_report,
 )
 
 def _sanitize_filename(filename: Optional[str]) -> str:
@@ -1650,3 +1668,159 @@ async def api_generate_executive_report(payload: dict):
         }
     finally:
         conn.close()
+
+
+# ==========================================================================
+# Demonstration Mode & Synthetic Telemetry REST API
+# ==========================================================================
+
+@app.get("/api/demo/state")
+async def api_demo_get_state():
+    """Retrieve current demonstration simulation state and multipliers."""
+    return get_demo_state()
+
+
+@app.post("/api/demo/state")
+async def api_demo_update_state(payload: dict):
+    """Update demonstration simulation parameters, multipliers, or scenario."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload: expected a dictionary.")
+    return update_demo_state(payload)
+
+
+@app.post("/api/demo/reset")
+async def api_demo_reset():
+    """Reset all demonstration data, flows, devices, alerts, and state to defaults."""
+    reset_demo_state()
+    return {
+        "success": True,
+        "message": "Demo data reset successfully",
+        "state": get_demo_state(),
+    }
+
+
+@app.get("/api/demo/telemetry")
+async def api_demo_telemetry(range: str = Query("1h")):
+    """Retrieve synthetic time-series telemetry metrics for demonstration charts."""
+    return get_demo_telemetry(range)
+
+
+@app.get("/api/demo/devices")
+async def api_demo_devices():
+    """Retrieve the inventory of isolated demonstration network devices."""
+    return get_demo_devices()
+
+
+@app.get("/api/demo/flows")
+async def api_demo_flows(
+    protocol: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+):
+    """Retrieve demonstration network traffic flows with optional filtering."""
+    return get_demo_flows(protocol=protocol, q=q)
+
+
+@app.get("/api/demo/alerts")
+async def api_demo_alerts(
+    severity: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+):
+    """Retrieve demonstration security alerts filtered by severity or status."""
+    return get_demo_alerts(severity=severity, status=status)
+
+
+@app.post("/api/demo/alerts/{alert_id}/triage")
+async def api_demo_triage_alert(alert_id: str, payload: dict):
+    """Triage a demonstration security alert with a status and assigned analyst."""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload: expected a dictionary.")
+    status = payload.get("status")
+    if not status:
+        raise HTTPException(status_code=400, detail="Missing required field: 'status'.")
+    analyst = payload.get("analyst")
+    try:
+        return triage_demo_alert(alert_id, status, analyst)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/api/demo/cases")
+async def api_demo_cases():
+    """Retrieve demonstration incident investigation cases with full timelines."""
+    return get_demo_cases()
+
+
+@app.get("/api/demo/threat-intel/{ip}")
+async def api_demo_threat_intel(ip: str):
+    """Retrieve demonstration threat intelligence profile for an IP address."""
+    return get_demo_threat_intel(ip)
+
+
+@app.get("/api/demo/health")
+async def api_demo_health():
+    """Retrieve demonstration collector and system health status."""
+    return get_demo_system_health()
+
+
+@app.get("/api/demo/report/pdf")
+async def api_demo_report_pdf(case_id: Optional[str] = Query(None)):
+    """Generate and download a PDF investigation report for demonstration cases."""
+    try:
+        pdf_bytes = generate_demo_pdf_report(case_id)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="NetSentinel_Demo_Investigation_Report.pdf"'},
+        )
+    except Exception as exc:
+        logger.error("Error generating demo PDF report: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate PDF report.")
+
+
+@app.get("/api/demo/files/{file_type}")
+async def api_demo_files(file_type: str):
+    """Download demonstration forensic artifacts including sample logs, images, and baseline files."""
+    ft = file_type.lower()
+    if ft == "csv":
+        return Response(
+            content=get_demo_csv_text(),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="net_sentinel_demo_logs.csv"'},
+        )
+    elif ft == "carrier":
+        return Response(
+            content=get_demo_carrier_image(),
+            media_type="image/png",
+            headers={"Content-Disposition": 'attachment; filename="demo_carrier.png"'},
+        )
+    elif ft == "stego":
+        return Response(
+            content=get_demo_stego_image(),
+            media_type="image/png",
+            headers={"Content-Disposition": 'attachment; filename="demo_stego_artifact.png"'},
+        )
+    elif ft == "clean":
+        return Response(
+            content=get_demo_baseline_files()["clean_bytes"],
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": 'attachment; filename="core_auth_service.sys"'},
+        )
+    elif ft == "tampered":
+        return Response(
+            content=get_demo_baseline_files()["tampered_bytes"],
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": 'attachment; filename="core_auth_service_tampered.sys"'},
+        )
+    elif ft == "baseline_info":
+        baseline = get_demo_baseline_files()
+        return {
+            "clean_hash": baseline["clean_hash"],
+            "tampered_hash": baseline["tampered_hash"],
+            "filename": baseline["filename"],
+        }
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown file type: '{file_type}'. Supported: 'csv', 'carrier', 'stego', 'clean', 'tampered', 'baseline_info'."
+        )
+

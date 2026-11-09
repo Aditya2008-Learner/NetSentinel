@@ -80,8 +80,8 @@
                     <i class="fa-solid fa-arrow-left" style="font-size: 0.75rem;"></i>
                     <span>Product Overview</span>
                 </a>
-                <div class="status-badge demo-badge">
-                    <i class="fa-solid fa-circle"></i> Demo Mode Active
+                <div class="status-badge demo-badge" id="sidebar-demo-badge" style="cursor: pointer;" title="Toggle NetSentinel Demo Mode">
+                    <i class="fa-solid fa-circle"></i> <span id="sidebar-demo-badge-text">Demo Mode Active</span>
                 </div>
             </div>
         </aside>
@@ -96,6 +96,9 @@
                     <span id="current-page-title">Overview Dashboard</span>
                 </div>
                 <div class="top-nav-right">
+                    <button type="button" class="btn btn-secondary try-demo-btn" id="top-nav-demo-toggle-btn" style="border-color: var(--accent-amber); color: var(--accent-amber); font-weight: 600; padding: 6px 12px; font-size: 0.8rem;">
+                        <i class="fa-solid fa-flask"></i> TRY DEMO
+                    </button>
                     <div class="search-box" style="position: relative; cursor: pointer;" id="search-box-trigger" title="Press Ctrl+K to open Command Palette">
                         <i class="fa-solid fa-search"></i>
                         <input type="text" placeholder="Search devices, alerts, pages... (Ctrl+K)" id="global-search" readonly style="cursor: pointer;" />
@@ -129,6 +132,18 @@
                 </div>
             </header>
 
+            <!-- Persistent Demo / Trial Mode Banner -->
+            <div id="persistent-demo-banner" class="demo-mode-banner hidden">
+                <div class="demo-banner-content">
+                    <span class="demo-pulse-badge"><i class="fa-solid fa-flask"></i> DEMO / TRIAL MODE ACTIVE</span>
+                    <span class="demo-banner-desc">Isolated in-memory simulation environment &bull; Production data completely untouched</span>
+                </div>
+                <div class="demo-banner-actions">
+                    <button type="button" class="btn btn-sm btn-secondary" id="demo-banner-reset-btn" title="Reset all demo data to pristine state"><i class="fa-solid fa-arrows-rotate"></i> Reset Demo</button>
+                    <button type="button" class="btn btn-sm btn-danger" id="demo-banner-exit-btn" title="Exit trial mode"><i class="fa-solid fa-power-off"></i> Exit Demo</button>
+                </div>
+            </div>
+
             <!-- Views Container -->
             <div class="views-wrapper" id="views-wrapper">
 
@@ -147,6 +162,22 @@
                             <button class="btn btn-secondary" data-action="switch-view" data-target="network-view">
                                 <i class="fa-solid fa-shield"></i> Network Security
                             </button>
+                            <div class="demo-controls-toolbar" id="overview-demo-controls" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="network_monitor" id="overview-try-demo-btn" title="Launch Network Monitor Simulation">
+                                    <i class="fa-solid fa-flask"></i> TRY DEMO
+                                </button>
+                                <div style="display: inline-flex; align-items: center; gap: 6px; background: var(--bg-surface-inset); padding: 4px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                    <label for="demo-bandwidth-multiplier" style="font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: nowrap;">Bandwidth:</label>
+                                    <input type="range" id="demo-bandwidth-multiplier" min="0.5" max="5.0" step="0.5" value="1.0" style="width: 75px; accent-color: var(--primary-accent); cursor: pointer;" />
+                                    <span id="demo-bandwidth-multiplier-val" style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--primary-accent); min-width: 32px;">1.0x</span>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-secondary" id="overview-demo-spike-btn" title="Trigger Instant Traffic Spike">
+                                    <i class="fa-solid fa-bolt" style="color: var(--warning);"></i> Spike
+                                </button>
+                                <button type="button" class="btn btn-sm btn-secondary" id="overview-demo-portscan-btn" title="Trigger Simulated Port Scan">
+                                    <i class="fa-solid fa-radar" style="color: var(--critical);"></i> Portscan
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -310,6 +341,9 @@
                                 <i class="fa-solid fa-download" style="color: var(--primary-accent);"></i>
                                 <span>Export Report</span>
                             </button>
+                            <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="analytics" id="analytics-try-demo-btn">
+                                <i class="fa-solid fa-flask"></i> TRY DEMO
+                            </button>
                         </div>
                     </div>
 
@@ -421,9 +455,18 @@
                 <!-- 2. NETWORK SECURITY VIEW -->
                 <section id="network-view" class="view-panel">
                     <div class="section-header">
-                        <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_NETWORK_MONITOR / 001</span>
-                        <h2>Network Security & Log Analysis</h2>
-                        <p>Upload network connection log CSV files or run heuristic threat detection rules (Port Scans, Connection Bursts, Brute Force).</p>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_NETWORK_MONITOR / 001</span>
+                                <h2>Network Security & Log Analysis</h2>
+                                <p>Upload network connection log CSV files or run heuristic threat detection rules (Port Scans, Connection Bursts, Brute Force).</p>
+                            </div>
+                            <div class="header-actions">
+                                <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="csv_analysis" id="network-try-demo-btn">
+                                    <i class="fa-solid fa-flask"></i> TRY DEMO
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -510,6 +553,9 @@
                         <h2>Live Network Monitoring</h2>
                         <p>Real-time packet metadata capture and flow aggregation from local Windows collector agent.</p>
                         <div class="header-actions">
+                            <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="flows" id="live-collector-try-demo-btn">
+                                <i class="fa-solid fa-flask"></i> TRY DEMO
+                            </button>
                             <button class="btn btn-secondary" id="refresh-collector-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh Status</button>
                         </div>
                     </div>
@@ -606,10 +652,19 @@
                 </section>
                 <section id="devices-view" class="view-panel">
                     <div class="section-header">
-                        <h2>Device & Host Inventory</h2>
-                        <p>Tracked devices and observed endpoints in the current environment.</p>
-                            <button class="btn btn-secondary" id="refresh-devices-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
-                            <button class="btn btn-primary" id="add-device-modal-btn"><i class="fa-solid fa-plus"></i> Add Device</button>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h2>Device & Host Inventory</h2>
+                                <p>Tracked devices and observed endpoints in the current environment.</p>
+                            </div>
+                            <div class="header-actions">
+                                <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="devices" id="devices-try-demo-btn">
+                                    <i class="fa-solid fa-flask"></i> TRY DEMO
+                                </button>
+                                <button class="btn btn-secondary" id="refresh-devices-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                                <button class="btn btn-primary" id="add-device-modal-btn"><i class="fa-solid fa-plus"></i> Add Device</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="card">
                         <div class="table-container">
@@ -637,6 +692,9 @@
                         <h2>Digital Forensics Investigations</h2>
                         <p>Manage cases, associate evidence hashes, and track findings.</p>
                         <div class="header-actions">
+                            <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="investigations" id="investigations-try-demo-btn">
+                                <i class="fa-solid fa-flask"></i> TRY DEMO
+                            </button>
                             <button class="btn btn-secondary" id="refresh-investigations-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
                             <button class="btn btn-primary" id="add-investigation-modal-btn"><i class="fa-solid fa-plus"></i> New Case</button>
                         </div>
@@ -687,8 +745,17 @@
                 <!-- 5. STEGANOGRAPHY LAB VIEW -->
                 <section id="stego-view" class="view-panel">
                     <div class="section-header">
-                        <h2>Steganography Lab</h2>
-                        <p>Embed or extract covert text payloads inside lossless cover images using LSB manipulation.</p>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h2>Steganography Lab</h2>
+                                <p>Embed or extract covert text payloads inside lossless cover images using LSB manipulation.</p>
+                            </div>
+                            <div class="header-actions">
+                                <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="stego" id="stego-try-demo-btn">
+                                    <i class="fa-solid fa-flask"></i> TRY DEMO
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="grid-2">
@@ -738,9 +805,18 @@
                 <!-- 6. IMAGE FORENSICS VIEW -->
                 <section id="forensics-view" class="view-panel">
                     <div class="section-header">
-                        <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_DIGITAL_FORENSICS / 003</span>
-                        <h2>Image Forensics & Heuristics</h2>
-                        <p>Analyze image metadata, file hashes, and statistical LSB noise distribution.</p>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_DIGITAL_FORENSICS / 003</span>
+                                <h2>Image Forensics & Heuristics</h2>
+                                <p>Analyze image metadata, file hashes, and statistical LSB noise distribution.</p>
+                            </div>
+                            <div class="header-actions">
+                                <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="forensics" id="forensics-try-demo-btn">
+                                    <i class="fa-solid fa-flask"></i> TRY DEMO
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -772,9 +848,18 @@
                 <!-- 7. INTEGRITY VERIFICATION VIEW -->
                 <section id="integrity-view" class="view-panel">
                     <div class="section-header">
-                        <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_FILE_INTEGRITY / 004</span>
-                        <h2>File Integrity Verification (SHA-256)</h2>
-                        <p>Calculate cryptographic file hashes and compare them against trusted baselines.</p>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <span class="badge badge-info" style="font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 6px; display: inline-flex;">MODULE_FILE_INTEGRITY / 004</span>
+                                <h2>File Integrity Verification (SHA-256)</h2>
+                                <p>Calculate cryptographic file hashes and compare them against trusted baselines.</p>
+                            </div>
+                            <div class="header-actions">
+                                <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="integrity" id="integrity-try-demo-btn">
+                                    <i class="fa-solid fa-flask"></i> TRY DEMO
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -806,8 +891,20 @@
                 <!-- 8. REPORTS VIEW -->
                 <section id="reports-view" class="view-panel">
                     <div class="section-header">
-                        <h2>Investigation Reports & Export</h2>
-                        <p>Export comprehensive security and forensics reports for audit or presentation.</p>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h2>Investigation Reports & Export</h2>
+                                <p>Export comprehensive security and forensics reports for audit or presentation.</p>
+                            </div>
+                            <div class="header-actions">
+                                <a href="/api/demo/report/pdf" download class="btn btn-primary" id="demo-download-pdf-btn">
+                                    <i class="fa-solid fa-file-pdf"></i> Download Sample PDF Report
+                                </a>
+                                <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="reports" id="reports-try-demo-btn">
+                                    <i class="fa-solid fa-flask"></i> TRY DEMO
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -840,6 +937,9 @@
                         <h2>SOC Security Alert Triage</h2>
                         <p>Centralized alert queue, heuristic confidence scoring, and incident acknowledgment.</p>
                         <div class="header-actions">
+                            <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="soc_alerts" id="soc-alerts-try-demo-btn">
+                                <i class="fa-solid fa-flask"></i> TRY DEMO
+                            </button>
                             <button class="btn btn-primary" id="refresh-soc-alerts-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh Queue</button>
                         </div>
                     </div>
@@ -869,6 +969,9 @@
                         <h2>Network Intelligence & Topology</h2>
                         <p>Visual mapping of discovered subnets, gateways, and cross-node traffic relationships.</p>
                         <div class="header-actions">
+                            <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="topology" id="topology-try-demo-btn">
+                                <i class="fa-solid fa-flask"></i> TRY DEMO
+                            </button>
                             <button class="btn btn-primary" id="refresh-topology-btn"><i class="fa-solid fa-arrows-rotate"></i> Refresh Topology</button>
                         </div>
                     </div>
@@ -882,8 +985,17 @@
                 <!-- 9. SETTINGS VIEW -->
                 <section id="settings-view" class="view-panel">
                     <div class="section-header">
-                        <h2>Platform Settings</h2>
-                        <p>Configure audio feedback, detection thresholds, and operational modes.</p>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                            <div>
+                                <h2>Platform Settings</h2>
+                                <p>Configure audio feedback, detection thresholds, and operational modes.</p>
+                            </div>
+                            <div class="header-actions">
+                                <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="health" id="settings-try-demo-btn">
+                                    <i class="fa-solid fa-flask"></i> TRY DEMO
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Audio & Sound Feedback Card -->
@@ -1161,7 +1273,126 @@
         </div>
     </div>
 
+    <!-- Threat Intelligence Demo Modal -->
+    <div id="demo-threat-intel-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Threat Intelligence Lookup">
+        <div class="modal-content threat-intel-modal">
+            <button type="button" class="modal-close" id="close-demo-threat-modal">&times;</button>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <i class="fa-solid fa-shield-virus" style="color: var(--warning); font-size: 1.25rem;"></i>
+                <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">Threat Intelligence &amp; IP Reputation (Trial Mode)</h3>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.84rem; margin-bottom: 16px;">
+                Query threat intelligence records, risk scoring heuristics, ASN, and historical anomaly indicators.
+            </p>
+
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label for="demo-ip-search" style="font-size: 0.8rem; font-weight: 600; color: var(--text-primary);">Search Target IP Address</label>
+                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                    <input type="text" id="demo-ip-search" placeholder="e.g. 198.51.100.14" value="198.51.100.14" style="flex: 1; font-family: var(--font-mono); font-size: 0.85rem;" />
+                    <button type="button" class="btn btn-primary" id="demo-ip-search-btn">
+                        <i class="fa-solid fa-magnifying-glass"></i> Analyze IP
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 6px;">Sample Trial IPs:</span>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm btn-secondary demo-ip-chip" data-ip="198.51.100.14" style="font-family: var(--font-mono); font-size: 0.74rem; padding: 3px 8px;">
+                        <i class="fa-solid fa-bug" style="color: var(--critical);"></i> 198.51.100.14
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary demo-ip-chip" data-ip="203.0.113.88" style="font-family: var(--font-mono); font-size: 0.74rem; padding: 3px 8px;">
+                        <i class="fa-solid fa-shield-halved" style="color: var(--warning);"></i> 203.0.113.88
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary demo-ip-chip" data-ip="192.168.1.1" style="font-family: var(--font-mono); font-size: 0.74rem; padding: 3px 8px;">
+                        <i class="fa-solid fa-check" style="color: var(--primary-accent);"></i> 192.168.1.1
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content container showing Risk Score, Threat Classification, ASN, Geolocation, Threat Tags, explanation -->
+            <div id="demo-intel-results" style="min-height: 120px;">
+                <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.84rem;">
+                    Enter an IP address or click a sample chip above to query demo threat intelligence.
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 20px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" id="cancel-demo-threat-modal-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Health Diagnostics Demo Modal -->
+    <div id="demo-system-health-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="System Health Diagnostics">
+        <div class="modal-content">
+            <button type="button" class="modal-close" id="close-demo-health-modal">&times;</button>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <i class="fa-solid fa-heart-pulse" style="color: var(--primary-accent); font-size: 1.25rem;"></i>
+                <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">System Health &amp; Collector Diagnostics (Trial Mode)</h3>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.84rem; margin-bottom: 16px;">
+                Simulated daemon metrics, worker thread telemetry, and collector operational states.
+            </p>
+
+            <!-- Collector Status Controls -->
+            <div style="margin-bottom: 20px;">
+                <label style="font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); display: block; margin-bottom: 8px; font-weight: 600;">
+                    Collector Operational State:
+                </label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm btn-secondary demo-collector-toggle-btn active" data-state="LIVE" id="demo-state-live-btn">
+                        <i class="fa-solid fa-circle" style="color: var(--primary-accent); font-size: 0.65rem;"></i> Live
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary demo-collector-toggle-btn" data-state="DEGRADED" id="demo-state-degraded-btn">
+                        <i class="fa-solid fa-circle" style="color: var(--warning); font-size: 0.65rem;"></i> Degraded
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary demo-collector-toggle-btn" data-state="DISCONNECTED" id="demo-state-disconnected-btn">
+                        <i class="fa-solid fa-circle" style="color: var(--critical); font-size: 0.65rem;"></i> Disconnected
+                    </button>
+                </div>
+            </div>
+
+            <!-- Gauges Grid: CPU, Memory, Latency, Processing Rate -->
+            <div class="grid grid-cols-2 gap-4" id="demo-health-gauges-container">
+                <div class="health-gauge">
+                    <span class="gauge-label"><i class="fa-solid fa-microchip"></i> CPU Utilization</span>
+                    <div class="gauge-val" id="demo-health-cpu">0.0%</div>
+                    <div class="gauge-bar-track">
+                        <div class="gauge-bar-fill" id="demo-health-cpu-bar" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="health-gauge">
+                    <span class="gauge-label"><i class="fa-solid fa-memory"></i> Memory Allocated</span>
+                    <div class="gauge-val" id="demo-health-mem">0.0%</div>
+                    <div class="gauge-bar-track">
+                        <div class="gauge-bar-fill" id="demo-health-mem-bar" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="health-gauge">
+                    <span class="gauge-label"><i class="fa-solid fa-stopwatch"></i> Telemetry Latency</span>
+                    <div class="gauge-val" id="demo-health-latency">0.0 ms</div>
+                    <div class="gauge-bar-track">
+                        <div class="gauge-bar-fill" id="demo-health-latency-bar" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="health-gauge">
+                    <span class="gauge-label"><i class="fa-solid fa-gauge-high"></i> Packet Loss / Drop</span>
+                    <div class="gauge-val" id="demo-health-rate">0.0%</div>
+                    <div class="gauge-bar-track">
+                        <div class="gauge-bar-fill" id="demo-health-rate-bar" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 20px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" id="cancel-demo-health-modal-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/sound.js?v=1.0"></script>
     <script src="/static/app.js?v=2.1"></script>
+    <script src="/static/demo.js?v=1.0"></script>
 </body>
 </html>

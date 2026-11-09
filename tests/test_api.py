@@ -920,3 +920,151 @@ def test_integrity_register_invalid_manual_sha256():
     assert res_valid.json()["success"] is True
     assert res_valid.json()["sha256"] == valid_hash
 
+
+def test_demo_api_suite():
+    # 1. GET /api/demo/state
+    res = client.get("/api/demo/state")
+    assert res.status_code == 200
+    state = res.json()
+    assert "bandwidth_multiplier" in state
+
+    # 2. POST /api/demo/state
+    res = client.post("/api/demo/state", json={"bandwidth_multiplier": 2.5, "active_scenario": "spike"})
+    assert res.status_code == 200
+    updated_state = res.json()
+    assert updated_state["bandwidth_multiplier"] == 2.5
+    assert updated_state["active_scenario"] == "spike"
+
+    # 3. POST /api/demo/reset
+    res = client.post("/api/demo/reset")
+    assert res.status_code == 200
+    reset_data = res.json()
+    assert reset_data["success"] is True
+    assert reset_data["state"]["bandwidth_multiplier"] == 1.0
+
+    # 4. GET /api/demo/telemetry
+    res = client.get("/api/demo/telemetry?range=1h")
+    assert res.status_code == 200
+    telemetry = res.json()
+    assert "series" in telemetry
+    assert len(telemetry["series"]) > 0
+
+    # 5. GET /api/demo/devices
+    res = client.get("/api/demo/devices")
+    assert res.status_code == 200
+    devices = res.json()
+    assert isinstance(devices, list)
+    assert len(devices) > 0
+
+    # 6. GET /api/demo/flows
+    res = client.get("/api/demo/flows")
+    assert res.status_code == 200
+    flows = res.json()
+    assert isinstance(flows, list)
+    assert len(flows) > 0
+
+    res_filtered = client.get("/api/demo/flows?protocol=TCP&q=192.168.1")
+    assert res_filtered.status_code == 200
+    filtered_flows = res_filtered.json()
+    assert isinstance(filtered_flows, list)
+
+    # 7. GET /api/demo/alerts
+    res = client.get("/api/demo/alerts")
+    assert res.status_code == 200
+    alerts = res.json()
+    assert isinstance(alerts, list)
+    assert len(alerts) > 0
+
+    res_crit = client.get("/api/demo/alerts?severity=CRITICAL")
+    assert res_crit.status_code == 200
+    assert all(a["severity"] == "CRITICAL" for a in res_crit.json())
+
+    # 8. POST /api/demo/alerts/{alert_id}/triage
+    alert_id = alerts[0]["alert_id"]
+    res_triage = client.post(
+        f"/api/demo/alerts/{alert_id}/triage",
+        json={"status": "RESOLVED", "analyst": "Test Analyst"},
+    )
+    assert res_triage.status_code == 200
+    triaged = res_triage.json()
+    assert triaged["status"] == "RESOLVED"
+    assert triaged["assigned_analyst"] == "Test Analyst"
+
+    # 404 for non-existent alert triage
+    res_bad_triage = client.post(
+        "/api/demo/alerts/NON_EXISTENT_ID/triage",
+        json={"status": "RESOLVED"},
+    )
+    assert res_bad_triage.status_code == 404
+
+    # 9. GET /api/demo/cases
+    res = client.get("/api/demo/cases")
+    assert res.status_code == 200
+    cases = res.json()
+    assert isinstance(cases, list)
+    assert len(cases) > 0
+    assert "timeline" in cases[0]
+
+    # 10. GET /api/demo/threat-intel/{ip}
+    res = client.get("/api/demo/threat-intel/203.0.113.88")
+    assert res.status_code == 200
+    intel = res.json()
+    assert intel["ip"] == "203.0.113.88"
+    assert "risk_score" in intel
+
+    # 11. GET /api/demo/health
+    res = client.get("/api/demo/health")
+    assert res.status_code == 200
+    health = res.json()
+    assert "collector_status" in health
+
+    # 12. GET /api/demo/report/pdf
+    res = client.get("/api/demo/report/pdf")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/pdf"
+    assert res.content.startswith(b"%PDF")
+
+    # 13. GET /api/demo/files/{file_type}
+    # csv
+    res = client.get("/api/demo/files/csv")
+    assert res.status_code == 200
+    assert "text/csv" in res.headers["content-type"]
+    assert "timestamp,src_ip,dst_ip" in res.text
+
+    # carrier
+    res = client.get("/api/demo/files/carrier")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "image/png"
+    assert res.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    # stego
+    res = client.get("/api/demo/files/stego")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "image/png"
+    assert res.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    # clean
+    res = client.get("/api/demo/files/clean")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/octet-stream"
+    assert b"AUTH_MODE=ENFORCED_PKI" in res.content
+
+    # tampered
+    res = client.get("/api/demo/files/tampered")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/octet-stream"
+    assert b"TAMPER: Backdoor access enabled" in res.content
+
+    # baseline_info
+    res = client.get("/api/demo/files/baseline_info")
+    assert res.status_code == 200
+    binfo = res.json()
+    assert "clean_hash" in binfo
+    assert "tampered_hash" in binfo
+    assert "filename" in binfo
+
+    # 404 for unknown file_type
+    res = client.get("/api/demo/files/unknown_file_type")
+    assert res.status_code == 404
+
+

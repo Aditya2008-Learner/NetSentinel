@@ -2681,3 +2681,181 @@ input[type="file"]::-webkit-file-upload-button:hover {
 #soc-alerts-table tr:hover td {
     background-color: rgba(255, 255, 255, 0.02);
 }
+
+/* ==========================================================================
+   Persistent Demo Banner & Interactive Trial Controls
+   Art Direction: Net Sentinel Tactical Visual Identity
+   Deep charcoal #090A0C, Surface #15191F, Border #252A32, Lime #B7F36B, Amber #E9B65B
+   ========================================================================== */
+
+.demo-mode-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(90deg, rgba(233, 182, 91, 0.12) 0%, rgba(21, 25, 31, 0.95) 40%, rgba(183, 243, 107, 0.08) 100%);
+    border-bottom: 1px solid var(--border-default);
+    border-left: 3px solid var(--warning);
+    padding: 10px 24px;
+    gap: 16px;
+    flex-wrap: wrap;
+    z-index: 50;
+    animation: bannerSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.demo-mode-banner.hidden {
+    display: none !important;
+}
+
+@keyframes bannerSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.demo-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.demo-pulse-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(233, 182, 91, 0.15);
+    color: var(--warning);
+    border: 1px solid rgba(233, 182, 91, 0.35);
+    border-radius: var(--radius-sm);
+    padding: 3px 9px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.demo-pulse-badge i {
+    animation: pulseSlow 2s infinite ease-in-out;
+    color: var(--warning);
+}
+
+.demo-banner-desc {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 400;
+}
+
+.demo-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Distinctive styling for TRY DEMO buttons */
+.try-demo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(183, 243, 107, 0.08) !important;
+    color: var(--primary-accent) !important;
+    border: 1px solid var(--primary-accent-border) !important;
+    font-family: var(--font-mono);
+    font-size: 0.76rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: all var(--transition-fast) !important;
+}
+
+.try-demo-btn:hover {
+    background: rgba(183, 243, 107, 0.18) !important;
+    border-color: var(--primary-accent) !important;
+    color: #fff !important;
+    box-shadow: 0 0 12px rgba(183, 243, 107, 0.25);
+    transform: translateY(-1px);
+}
+
+/* Demo Controls Toolbar */
+.demo-controls-toolbar {
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: var(--shadow-sm);
+}
+
+/* Threat Intel Demo Modal */
+.threat-intel-modal {
+    max-width: 620px !important;
+}
+
+.threat-intel-modal .demo-ip-chip {
+    transition: all var(--transition-fast);
+}
+
+.threat-intel-modal .demo-ip-chip:hover {
+    border-color: var(--primary-accent);
+    color: var(--primary-accent);
+    background: rgba(183, 243, 107, 0.1);
+}
+
+/* System Health Diagnostics Gauges */
+.health-gauge {
+    background: var(--bg-surface-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.health-gauge .gauge-label {
+    font-size: 0.74rem;
+    font-family: var(--font-headline);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.health-gauge .gauge-val {
+    font-size: 1.45rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.health-gauge .gauge-bar-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.health-gauge .gauge-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-accent) 0%, var(--warning) 100%);
+    border-radius: 3px;
+    transition: width 0.4s ease-out;
+}
+
+.demo-collector-toggle-btn.active {
+    border-color: var(--primary-accent) !important;
+    background: rgba(183, 243, 107, 0.12) !important;
+    color: var(--text-primary) !important;
+}
+
