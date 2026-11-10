@@ -1,0 +1,12 @@
+{
+  "id": "exfiltration",
+  "title": "Covert Data Exfiltration",
+  "description": "Anomalous sustained egress flows transmitting high-entropy steganographic files.",
+  "bandwidth_multiplier": 4.0,
+  "packet_rate_multiplier": 1.5,
+  "cpu_impact": 15.0,
+  "threat_category": "Exfiltration",
+  "severity": "CRITICAL",
+  "target_ip": "198.51.100.14",
+  "recommended_action": "Quarantine source host and revoke egress proxy privileges."
+}

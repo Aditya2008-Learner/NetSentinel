@@ -7,8 +7,9 @@
 (function (window) {
     'use strict';
 
-    // State variables
+    // State variables with lifecycle state machine
     let demoState = {
+        status: 'IDLE',
         active: false,
         currentFeature: 'network_monitor',
         bandwidthMultiplier: 1.0,
@@ -20,10 +21,10 @@
     function escapeHtml(str) {
         if (str === null || str === undefined) return '';
         return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
+            .replace(/&/g, '&')
+            .replace(/</g, '<')
+            .replace(/>/g, '>')
+            .replace(/"/g, '"')
             .replace(/'/g, '&#039;');
     }
 
@@ -155,7 +156,6 @@
             const modal = document.getElementById('demo-system-health-modal');
             if (modal) {
                 modal.classList.remove('hidden');
-                demoSystemHealth();
             }
         };
 
@@ -228,11 +228,15 @@
             })
             .catch(() => {});
 
+        // Check sessionStorage for persisted demo state OR URL query parameter
+        const savedActive = sessionStorage.getItem('net_sentinel_demo_active') === 'true';
+        const savedFeature = sessionStorage.getItem('net_sentinel_demo_feature');
         const urlParams = new URLSearchParams(window.location.search);
         const demoParam = urlParams.get('demo');
-        if (demoParam) {
+
+        if (savedActive || demoParam) {
             setTimeout(() => {
-                enable(demoParam);
+                enable(savedFeature || demoParam || 'network_monitor');
             }, 300);
         }
     }
@@ -242,12 +246,18 @@
      */
     function enable(featureName) {
         if (!document.getElementById('views-wrapper')) {
+            sessionStorage.setItem('net_sentinel_demo_active', 'true');
+            sessionStorage.setItem('net_sentinel_demo_feature', featureName || 'network_monitor');
             window.location.href = '/dashboard?demo=' + encodeURIComponent(featureName || 'network_monitor');
             return;
         }
 
+        demoState.status = 'INITIALIZING';
         demoState.active = true;
         demoState.currentFeature = featureName || 'network_monitor';
+
+        sessionStorage.setItem('net_sentinel_demo_active', 'true');
+        sessionStorage.setItem('net_sentinel_demo_feature', demoState.currentFeature);
 
         if (window.NetSentinelSound) {
             window.NetSentinelSound.play('success');
@@ -275,6 +285,8 @@
             badgeText.textContent = 'Demo Mode: Active';
         }
 
+        demoState.status = 'ACTIVE';
+
         // Execute feature walkthrough
         runFeatureWalkthrough(demoState.currentFeature);
     }
@@ -283,11 +295,15 @@
      * Exits demo mode, hides demo bar, restores normal view state.
      */
     function disable() {
+        demoState.status = 'STOPPING';
         demoState.active = false;
         if (demoState.demoTelemetryInterval) {
             clearInterval(demoState.demoTelemetryInterval);
             demoState.demoTelemetryInterval = null;
         }
+
+        sessionStorage.removeItem('net_sentinel_demo_active');
+        sessionStorage.removeItem('net_sentinel_demo_feature');
 
         if (window.NetSentinelSound) {
             window.NetSentinelSound.play('click');
@@ -313,6 +329,21 @@
         if (badgeText) {
             badgeText.textContent = 'Demo Mode Active';
         }
+
+        // If on dashboard, reload active view with live data
+        if (window.switchView) {
+            const activeView = document.querySelector('.view-panel.active');
+            if (activeView) {
+                const viewId = activeView.id;
+                if (viewId === 'overview-view' && window.loadOverviewData) {
+                    window.loadOverviewData();
+                } else if (window.switchView) {
+                    window.switchView(viewId);
+                }
+            }
+        }
+
+        demoState.status = 'IDLE';
     }
 
     /**
@@ -335,8 +366,10 @@
                 if (bwSlider) bwSlider.value = '1.0';
                 if (bwLabel) bwLabel.textContent = '1.0x';
 
-                // Reload current view walkthrough
-                runFeatureWalkthrough(demoState.currentFeature);
+                // Reload current view walkthrough, but do not re-open modal features
+                if (demoState.currentFeature !== 'health' && demoState.currentFeature !== 'threat_intel') {
+                    runFeatureWalkthrough(demoState.currentFeature);
+                }
             })
             .catch(err => {
                 if (window.NetSentinelSound) {
@@ -524,6 +557,10 @@
                     const latest = series[series.length - 1];
                     window.updateTelemetrySeriesWithLiveMeasurements(latest.bandwidth_mbps, latest.bandwidth_mbps * 0.75, latest);
                 }
+                // Also call app.js's continuous graph loader if available
+                if (window.loadTelemetryGraph) {
+                    window.loadTelemetryGraph();
+                }
             })
             .catch(() => {});
     }
@@ -578,12 +615,73 @@
         if (window.switchView) {
             window.switchView('topology-view');
         }
-        if (window.loadNetworkTopology) {
-            window.loadNetworkTopology();
-        }
+        renderDemoTopology();
         if (window.sileo) {
             window.sileo.info('Simulated C2 beacon pulse triggered on topology canvas.');
         }
+    }
+
+    async function renderDemoTopology() {
+        const canvas = document.getElementById("topology-canvas");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        try {
+            const res = await fetch("/api/intelligence/topology");
+            if (!res.ok) throw new Error("Failed to load network topology");
+            const data = await res.json();
+            const nodes = data.nodes || [];
+            const edges = data.edges || [];
+
+            const width = canvas.parentElement ? (canvas.parentElement.clientWidth || 600) : 600;
+            const height = 400;
+            canvas.width = width;
+            canvas.height = height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw grid
+            ctx.strokeStyle = "rgba(38, 53, 79, 0.3)";
+            ctx.lineWidth = 1;
+            for (let x = 0; x < width; x += 40) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+            }
+            for (let y = 0; y < height; y += 40) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+            }
+
+            const nodePositions = {};
+            nodes.forEach((node, idx) => {
+                const angle = (idx / Math.max(nodes.length, 1)) * Math.PI * 2;
+                const radius = Math.min(width, height) * 0.32;
+                const x = width / 2 + Math.cos(angle) * radius;
+                const y = height / 2 + Math.sin(angle) * radius;
+                nodePositions[node.id] = { x, y, label: node.label };
+            });
+
+            edges.forEach(e => {
+                const p1 = nodePositions[e.src_ip];
+                const p2 = nodePositions[e.dst_ip];
+                if (p1 && p2) {
+                    ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.stroke();
+                }
+            });
+
+            Object.values(nodePositions).forEach(pos => {
+                ctx.fillStyle = "#B7F36B";
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "#F1F3F5";
+                ctx.font = "11px 'JetBrains Mono', monospace";
+                ctx.fillText(pos.label, pos.x + 10, pos.y + 4);
+            });
+        } catch (_) {}
     }
 
     function demoDeviceInventory() {
@@ -981,17 +1079,78 @@
             });
     }
 
+    // ==========================================================================
+    // onViewSwitched - Maps view panel IDs to walkthrough functions
+    // ==========================================================================
+    function onViewSwitched(targetId) {
+        switch (targetId) {
+            case 'overview-view':
+                demoNetworkMonitor();
+                break;
+            case 'analytics-view':
+                demoAnalytics();
+                break;
+            case 'network-view':
+                demoCsvAnalysis();
+                break;
+            case 'topology-view':
+                demoTopology();
+                break;
+            case 'devices-view':
+                demoDeviceInventory();
+                break;
+            case 'live-collector-view':
+                demoFlowExplorer();
+                break;
+            case 'soc-alerts-view':
+                demoSocAlerts();
+                break;
+            case 'investigations-view':
+                demoInvestigations();
+                break;
+            case 'stego-view':
+                demoStego();
+                break;
+            case 'forensics-view':
+                demoImageForensics();
+                break;
+            case 'integrity-view':
+                demoIntegrity();
+                break;
+            case 'reports-view':
+                demoReports();
+                break;
+            case 'settings-view':
+                break;
+            default:
+                break;
+        }
+    }
+
     // Expose global controller on window
     window.NetSentinelDemo = {
+        // State getters
+        isDemoMode: () => demoState.active,
+        getState: () => ({ ...demoState }),
+        getStatus: () => demoState.status,
+
+        // View switcher integration
+        onViewSwitched: onViewSwitched,
+
+        // Lifecycle
         init: init,
         enable: enable,
         disable: disable,
         reset: reset,
+
+        // Demo controls
         updateBandwidth: updateBandwidth,
         injectAnomaly: injectAnomaly,
         toggleCollectorState: toggleCollectorState,
         inspectDevice: inspectDevice,
         triageDemoAlert: triageDemoAlert,
+
+        // Feature walkthroughs
         demoNetworkMonitor: demoNetworkMonitor,
         demoAnalytics: demoAnalytics,
         demoCsvAnalysis: demoCsvAnalysis,
@@ -1005,7 +1164,15 @@
         demoImageForensics: demoImageForensics,
         demoIntegrity: demoIntegrity,
         demoReports: demoReports,
-        demoSystemHealth: demoSystemHealth
+        demoSystemHealth: demoSystemHealth,
+
+        // Function aliases expected by app.js
+        loadDemoOverview: demoNetworkMonitor,
+        loadDemoDevices: demoDeviceInventory,
+        loadDemoFlows: demoFlowExplorer,
+        loadDemoSocAlerts: demoSocAlerts,
+        loadDemoTopology: demoTopology,
+        loadDemoInvestigations: demoInvestigations
     };
 
     // Auto-init on DOM content loaded

@@ -1,0 +1,12 @@
+{
+  "id": "spike",
+  "title": "Traffic Spike (DoS Burst)",
+  "description": "High-volume ingress volumetric flood targeting default gateway interfaces.",
+  "bandwidth_multiplier": 3.5,
+  "packet_rate_multiplier": 3.0,
+  "cpu_impact": 40.0,
+  "threat_category": "Volumetric Denial of Service",
+  "severity": "CRITICAL",
+  "target_ip": "192.168.1.1",
+  "recommended_action": "Enable upstream rate-limiting and route mitigation filters."
+}

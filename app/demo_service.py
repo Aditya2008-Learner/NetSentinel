@@ -1,9 +1,31 @@
 import copy
 import io
 import hashlib
+import json
 import math
 from datetime import datetime, timezone
-from PIL import Image
+from pathlib import Path
+
+try:
+    from PIL import Image
+    _HAS_PIL = True
+except ImportError:
+    _HAS_PIL = False
+    Image = None
+
+_BASE_DIR = Path(__file__).resolve().parent.parent
+_STATE_FILE = _BASE_DIR / "data" / "demo_state.json"
+DEMO_SCENARIOS_DIR = _BASE_DIR / "data" / "scenarios"
+DEMO_ARTIFACTS_DIR = _BASE_DIR / "data" / "demo_artifacts"
+DEMO_CARRIER_PATH = DEMO_ARTIFACTS_DIR / "demo_carrier.png"
+DEMO_STEGO_PATH = DEMO_ARTIFACTS_DIR / "demo_stego_artifact.png"
+
+# Minimal valid 1x1 transparent PNG fallback bytes
+_FALLBACK_PNG_BYTES = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00"
+    b"\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import (
@@ -324,6 +346,40 @@ _alerts = copy.deepcopy(_INITIAL_ALERTS)
 _cases = copy.deepcopy(_INITIAL_CASES)
 _threat_intel = copy.deepcopy(_INITIAL_THREAT_INTEL)
 
+def _save_persisted_state() -> None:
+    try:
+        _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "state": _state,
+            "alerts": _alerts,
+            "devices": _devices,
+        }
+        temp_file = _STATE_FILE.with_suffix(".tmp")
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        temp_file.replace(_STATE_FILE)
+    except Exception:
+        pass
+
+def _load_persisted_state() -> None:
+    global _state, _alerts, _devices
+    if not _STATE_FILE.exists():
+        return
+    try:
+        with open(_STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            if "state" in data and isinstance(data["state"], dict):
+                _state = copy.deepcopy(data["state"])
+            if "alerts" in data and isinstance(data["alerts"], list):
+                _alerts = copy.deepcopy(data["alerts"])
+            if "devices" in data and isinstance(data["devices"], list):
+                _devices = copy.deepcopy(data["devices"])
+    except Exception:
+        pass
+
+_load_persisted_state()
+
 def reset_demo_state() -> None:
     global _state, _devices, _flows, _alerts, _cases, _threat_intel
     _state = copy.deepcopy(_INITIAL_STATE)
@@ -332,6 +388,20 @@ def reset_demo_state() -> None:
     _alerts = copy.deepcopy(_INITIAL_ALERTS)
     _cases = copy.deepcopy(_INITIAL_CASES)
     _threat_intel = copy.deepcopy(_INITIAL_THREAT_INTEL)
+    if _STATE_FILE.exists():
+        _STATE_FILE.unlink(missing_ok=True)
+
+def get_demo_scenarios() -> list:
+    scenarios = []
+    if DEMO_SCENARIOS_DIR.is_dir():
+        for p in DEMO_SCENARIOS_DIR.glob("*.json"):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    scenarios.append(json.load(f))
+            except Exception:
+                pass
+    scenarios.sort(key=lambda s: str(s.get("id", "")))
+    return scenarios
 
 def get_demo_state() -> dict:
     return copy.deepcopy(_state)
@@ -348,12 +418,14 @@ def update_demo_state(updates: dict) -> dict:
         _state["packet_rate_multiplier"] = max(0.2, min(5.0, val))
     if "active_scenario" in updates:
         scen = updates["active_scenario"]
-        if scen in ["spike", "portscan", "bruteforce", "exfiltration", None, ""]:
+        valid_scenarios = {s["id"] for s in get_demo_scenarios() if "id" in s} | {"spike", "portscan", "bruteforce", "exfiltration", None, ""}
+        if scen in valid_scenarios:
             _state["active_scenario"] = scen if scen else None
     if "collector_health" in updates:
         health = str(updates["collector_health"]).upper()
         if health in ["LIVE", "DEGRADED", "DISCONNECTED"]:
             _state["collector_health"] = health
+    _save_persisted_state()
     return copy.deepcopy(_state)
 
 def get_demo_devices() -> list:
@@ -440,6 +512,8 @@ def get_demo_telemetry(time_range: str = "1h") -> dict:
     pkt_mult = _state["packet_rate_multiplier"]
     scenario = _state["active_scenario"]
     health = _state["collector_health"]
+    loaded_scenarios = {s["id"]: s for s in get_demo_scenarios() if "id" in s}
+    active_scen_config = loaded_scenarios.get(scenario)
 
     points = 24
     series = []
@@ -461,7 +535,15 @@ def get_demo_telemetry(time_range: str = "1h") -> dict:
             cpu = 15.0 + 5.0 * math.sin(i / 3.0)
             drop = 0.0001
 
-            if scenario == "spike" and i >= points - 6:
+            if active_scen_config and i >= points - 6:
+                bw *= float(active_scen_config.get("bandwidth_multiplier", 1.0))
+                pps = int(pps * float(active_scen_config.get("packet_rate_multiplier", 1.0)))
+                cpu += float(active_scen_config.get("cpu_impact", 0.0))
+                if scenario == "portscan":
+                    flows += 80
+                elif scenario == "exfiltration":
+                    drop = 0.015
+            elif scenario == "spike" and i >= points - 6:
                 bw *= 3.5
                 pps = int(pps * 3.0)
                 cpu += 40.0
@@ -480,9 +562,13 @@ def get_demo_telemetry(time_range: str = "1h") -> dict:
                 drop = 0.045
                 cpu += 30.0
 
+        inbound = round(bw * 0.65, 2)
+        outbound = round(bw * 0.35, 2)
         series.append({
             "timestamp": ts,
             "bandwidth_mbps": round(max(0.0, bw), 2),
+            "inbound_mbps": inbound,
+            "outbound_mbps": outbound,
             "packets_per_sec": max(0, pps),
             "active_flows": max(0, flows),
             "cpu_percent": round(max(0.0, min(100.0, cpu)), 1),
@@ -539,6 +625,7 @@ def triage_demo_alert(alert_id: str, status: str, analyst: str = None) -> dict:
     }
     target_case["timeline"].append(timeline_event)
     target_case["updated_at"] = now_iso
+    _save_persisted_state()
 
     return copy.deepcopy(target_alert)
 
@@ -555,40 +642,60 @@ def get_demo_csv_text() -> str:
     return header + "\n".join(rows) + "\n"
 
 def get_demo_carrier_image() -> bytes:
-    img = Image.new("RGB", (120, 80), color=(40, 90, 140))
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
+    if DEMO_CARRIER_PATH.is_file():
+        return DEMO_CARRIER_PATH.read_bytes()
+    if _HAS_PIL and Image is not None:
+        img = Image.new("RGB", (120, 80), color=(40, 90, 140))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        data = buf.getvalue()
+        try:
+            DEMO_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+            DEMO_CARRIER_PATH.write_bytes(data)
+        except OSError:
+            pass
+        return data
+    return _FALLBACK_PNG_BYTES
 
 def get_demo_stego_image() -> bytes:
-    secret_text = "NetSentinel-Demo-Evidence-Token-987"
-    secret_bytes = secret_text.encode("utf-8")
-    length_prefix = len(secret_bytes).to_bytes(4, byteorder="big")
-    payload = length_prefix + secret_bytes
-    binary_payload = "".join(format(b, "08b") for b in payload)
+    if DEMO_STEGO_PATH.is_file():
+        return DEMO_STEGO_PATH.read_bytes()
+    if _HAS_PIL and Image is not None:
+        secret_text = "NetSentinel-Demo-Evidence-Token-987"
+        secret_bytes = secret_text.encode("utf-8")
+        length_prefix = len(secret_bytes).to_bytes(4, byteorder="big")
+        payload = length_prefix + secret_bytes
+        binary_payload = "".join(format(b, "08b") for b in payload)
 
-    img = Image.new("RGB", (120, 80), color=(50, 80, 120))
-    pixels = list(img.getdata())
-    new_pixels = []
-    idx = 0
-    data_len = len(binary_payload)
-    for r, g, b in pixels:
-        if idx < data_len:
-            r = (r & ~1) | int(binary_payload[idx])
-            idx += 1
-        if idx < data_len:
-            g = (g & ~1) | int(binary_payload[idx])
-            idx += 1
-        if idx < data_len:
-            b = (b & ~1) | int(binary_payload[idx])
-            idx += 1
-        new_pixels.append((r, g, b))
+        img = Image.new("RGB", (120, 80), color=(50, 80, 120))
+        pixels = list(img.getdata())
+        new_pixels = []
+        idx = 0
+        data_len = len(binary_payload)
+        for r, g, b in pixels:
+            if idx < data_len:
+                r = (r & ~1) | int(binary_payload[idx])
+                idx += 1
+            if idx < data_len:
+                g = (g & ~1) | int(binary_payload[idx])
+                idx += 1
+            if idx < data_len:
+                b = (b & ~1) | int(binary_payload[idx])
+                idx += 1
+            new_pixels.append((r, g, b))
 
-    encoded = Image.new("RGB", (120, 80))
-    encoded.putdata(new_pixels)
-    buf = io.BytesIO()
-    encoded.save(buf, format="PNG")
-    return buf.getvalue()
+        encoded = Image.new("RGB", (120, 80))
+        encoded.putdata(new_pixels)
+        buf = io.BytesIO()
+        encoded.save(buf, format="PNG")
+        data = buf.getvalue()
+        try:
+            DEMO_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+            DEMO_STEGO_PATH.write_bytes(data)
+        except OSError:
+            pass
+        return data
+    return _FALLBACK_PNG_BYTES
 
 def get_demo_baseline_files() -> dict:
     clean_text = (

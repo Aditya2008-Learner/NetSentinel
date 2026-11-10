@@ -1,0 +1,12 @@
+{
+  "id": "bruteforce",
+  "title": "Brute-Force Attempts (SSH)",
+  "description": "Repeated credential stuffing against internal SSH bastions.",
+  "bandwidth_multiplier": 1.0,
+  "packet_rate_multiplier": 2.2,
+  "cpu_impact": 18.0,
+  "threat_category": "Credential Access",
+  "severity": "HIGH",
+  "target_ip": "192.168.1.50",
+  "recommended_action": "Enforce key-only authentication and fail2ban jails."
+}

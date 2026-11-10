@@ -1,4 +1,21 @@
 // Net Sentinel Frontend Controller
+function isDemoModeActive() {
+    if (window.NetSentinelDemo) {
+        if (typeof window.NetSentinelDemo.isDemoMode === "function") {
+            return window.NetSentinelDemo.isDemoMode();
+        }
+        if (typeof window.NetSentinelDemo.active === "boolean") {
+            return window.NetSentinelDemo.active;
+        }
+    }
+    try {
+        return sessionStorage.getItem("net_sentinel_demo_active") === "true";
+    } catch (_) {
+        return false;
+    }
+}
+window.isDemoModeActive = isDemoModeActive;
+
 let telemetryLiveInterval = null;
 let telemetryPaused = false;
 let latestTelemetryData = null;
@@ -234,6 +251,28 @@ function switchView(targetId) {
         if (titleEl) titleEl.textContent = titleText;
 
         // View-specific data loading when panel becomes active
+        if (isDemoModeActive()) {
+            if (window.NetSentinelDemo && typeof window.NetSentinelDemo.onViewSwitched === "function") {
+                window.NetSentinelDemo.onViewSwitched(targetId);
+            } else if (targetId === "devices-view" && window.NetSentinelDemo?.loadDemoDevices) {
+                window.NetSentinelDemo.loadDemoDevices();
+            } else if (targetId === "live-collector-view" && window.NetSentinelDemo?.loadDemoFlows) {
+                window.NetSentinelDemo.loadDemoFlows();
+            } else if (targetId === "soc-alerts-view" && window.NetSentinelDemo?.loadDemoSocAlerts) {
+                window.NetSentinelDemo.loadDemoSocAlerts();
+            } else if (targetId === "topology-view" && window.NetSentinelDemo?.loadDemoTopology) {
+                window.NetSentinelDemo.loadDemoTopology();
+            } else if (targetId === "investigations-view" && window.NetSentinelDemo?.loadDemoInvestigations) {
+                window.NetSentinelDemo.loadDemoInvestigations();
+            }
+            if (targetId === "overview-view") {
+                _lastTime = performance.now();
+                loadTelemetryGraph();
+                renderTelemetryChart();
+            }
+            return;
+        }
+
         if (targetId === "overview-view") {
             _lastTime = performance.now();
             renderTelemetryChart();
@@ -257,6 +296,13 @@ function switchView(targetId) {
 }
 
 async function loadLiveCollectorData() {
+    if (isDemoModeActive()) {
+        const demoFn = window.NetSentinelDemo && (window.NetSentinelDemo.loadDemoFlows || window.NetSentinelDemo.demoFlowExplorer);
+        if (typeof demoFn === "function") {
+            demoFn.call(window.NetSentinelDemo);
+        }
+        return;
+    }
     try {
         const res = await fetch("/api/collector/status");
         if (!res.ok) throw new Error("Failed to load live collector status");
@@ -399,6 +445,16 @@ function renderLiveProtocolDonut(protocols) {
     legendList.innerHTML = legendHtml;
 }
 async function loadOverviewData() {
+    if (isDemoModeActive()) {
+        if (window.NetSentinelDemo) {
+            if (typeof window.NetSentinelDemo.loadDemoOverview === "function") {
+                window.NetSentinelDemo.loadDemoOverview();
+            } else if (typeof window.NetSentinelDemo.demoNetworkMonitor === "function") {
+                window.NetSentinelDemo.demoNetworkMonitor();
+            }
+        }
+        return;
+    }
     try {
         const res = await fetch("/api/overview");
         const data = await res.json();
@@ -445,7 +501,9 @@ function _metricPair(point, metric) {
     if (!point) return [0, 0];
     if (metric === "packets") return [point.packets_per_sec || 0, (point.packets_per_sec || 0) * 0.42];
     if (metric === "latency") return [point.latency_ms || 0, Math.max(0, (point.latency_ms || 0) * 0.55)];
-    return [point.inbound_mbps || 0, point.outbound_mbps || 0];
+    const inVal = Number.isFinite(point.inbound_mbps) ? point.inbound_mbps : (point.bandwidth_mbps || 0);
+    const outVal = Number.isFinite(point.outbound_mbps) ? point.outbound_mbps : ((point.bandwidth_mbps || 0) * 0.45);
+    return [inVal, outVal];
 }
 
 function initTelemetrySeriesFromData(series, metric) {
@@ -816,7 +874,10 @@ async function loadTelemetryGraph() {
     const seq = ++_telemetrySeq;
 
     try {
-        const res = await fetch(`/api/telemetry?range=${encodeURIComponent(range)}`);
+        const endpoint = isDemoModeActive()
+            ? `/api/demo/telemetry?range=${encodeURIComponent(range)}`
+            : `/api/telemetry?range=${encodeURIComponent(range)}`;
+        const res = await fetch(endpoint);
         if (seq !== _telemetrySeq) return; // stale — a newer request superseded this one
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -832,8 +893,7 @@ async function loadTelemetryGraph() {
 
         // Validate numeric fields; drop any point with non-finite values.
         data.series = data.series.filter(s =>
-            Number.isFinite(s.inbound_mbps) &&
-            Number.isFinite(s.outbound_mbps) &&
+            (Number.isFinite(s.inbound_mbps) || Number.isFinite(s.bandwidth_mbps)) &&
             Number.isFinite(s.packets_per_sec) &&
             Number.isFinite(s.latency_ms)
         );
@@ -1140,6 +1200,13 @@ function getInvestigationBadgeClass(status) {
 }
 
 function loadInvestigations() {
+    if (isDemoModeActive()) {
+        const demoFn = window.NetSentinelDemo && (window.NetSentinelDemo.loadDemoInvestigations || window.NetSentinelDemo.demoInvestigations);
+        if (typeof demoFn === "function") {
+            demoFn.call(window.NetSentinelDemo);
+        }
+        return;
+    }
     return fetch("/api/investigations")
         .then(res => res.json())
         .then(investigations => {
@@ -2160,6 +2227,13 @@ function updateTelemetryTimeAxis(range) {
 }
 
 async function loadDevices() {
+    if (isDemoModeActive()) {
+        const demoFn = window.NetSentinelDemo && (window.NetSentinelDemo.loadDemoDevices || window.NetSentinelDemo.demoDeviceInventory);
+        if (typeof demoFn === "function") {
+            demoFn.call(window.NetSentinelDemo);
+        }
+        return;
+    }
     try {
         const res = await fetch("/api/devices");
         if (!res.ok) throw new Error("Failed to load devices");
@@ -2279,6 +2353,9 @@ async function deleteDevice(deviceId) {
 }
 
 async function loadAnalysisHistory() {
+    if (isDemoModeActive()) {
+        return;
+    }
     try {
         const res = await fetch("/api/network/history");
         if (!res.ok) throw new Error("Failed to load analysis history");
@@ -2836,6 +2913,9 @@ function initNotificationCenter() {
 }
 
 async function pollSecurityAlerts() {
+    if (isDemoModeActive()) {
+        return;
+    }
     try {
         const res = await fetch("/api/soc/alerts?status=OPEN");
         if (!res.ok) return;
@@ -3444,8 +3524,23 @@ window.generateReport = generateReport;
 window.toggleReportPreview = toggleReportPreview;
 window.loadSocAlerts = loadSocAlerts;
 window.loadNetworkTopology = loadNetworkTopology;
+window.switchView = switchView;
+window.updateTelemetrySeriesWithLiveMeasurements = updateTelemetrySeriesWithLiveMeasurements;
+window.loadNetworkResults = loadNetworkResults;
+window.renderInvestigationTimeline = renderInvestigationTimeline;
+window.setTimelineEvents = function(events) {
+    _timelineEvents = events;
+    renderInvestigationTimeline();
+};
 
 async function loadSocAlerts() {
+    if (isDemoModeActive()) {
+        const demoFn = window.NetSentinelDemo && (window.NetSentinelDemo.loadDemoSocAlerts || window.NetSentinelDemo.demoSocAlerts);
+        if (typeof demoFn === "function") {
+            demoFn.call(window.NetSentinelDemo);
+        }
+        return;
+    }
     const tbody = document.getElementById("soc-alerts-tbody");
     if (!tbody) return;
     try {
@@ -3510,6 +3605,13 @@ async function triageSocAlert(alertId, status) {
 }
 
 async function loadNetworkTopology() {
+    if (isDemoModeActive()) {
+        const demoFn = window.NetSentinelDemo && (window.NetSentinelDemo.loadDemoTopology || window.NetSentinelDemo.demoTopology);
+        if (typeof demoFn === "function") {
+            demoFn.call(window.NetSentinelDemo);
+        }
+        return;
+    }
     const canvas = document.getElementById("topology-canvas");
     if (!canvas) return;
     const ctx = canvas.getContext("2d");

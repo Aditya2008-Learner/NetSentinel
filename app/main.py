@@ -40,6 +40,7 @@ from .demo_service import (
     get_demo_state,
     update_demo_state,
     reset_demo_state,
+    get_demo_scenarios,
     get_demo_telemetry,
     get_demo_devices,
     get_demo_flows,
@@ -1673,6 +1674,11 @@ async def api_generate_executive_report(payload: dict):
 # ==========================================================================
 # Demonstration Mode & Synthetic Telemetry REST API
 # ==========================================================================
+
+@app.get("/api/demo/scenarios")
+async def api_demo_scenarios():
+    return get_demo_scenarios()
+
 
 @app.get("/api/demo/state")
 async def api_demo_get_state():

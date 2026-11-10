@@ -16,6 +16,46 @@ def ensure_clean_demo_state():
     reset_demo_state()
 
 
+def test_demo_scenarios():
+    res = client.get("/api/demo/scenarios")
+    assert res.status_code == 200
+    scenarios = res.json()
+    assert isinstance(scenarios, list)
+    assert len(scenarios) == 4
+
+    expected_ids = ["bruteforce", "exfiltration", "portscan", "spike"]
+    assert [s["id"] for s in scenarios] == expected_ids
+
+    scenarios_by_id = {s["id"]: s for s in scenarios}
+    assert scenarios_by_id["spike"]["bandwidth_multiplier"] == 3.5
+    assert scenarios_by_id["spike"]["packet_rate_multiplier"] == 3.0
+    assert scenarios_by_id["spike"]["cpu_impact"] == 40.0
+    assert scenarios_by_id["spike"]["severity"] == "CRITICAL"
+    assert scenarios_by_id["spike"]["threat_category"] == "Volumetric Denial of Service"
+
+    assert scenarios_by_id["portscan"]["bandwidth_multiplier"] == 1.2
+    assert scenarios_by_id["portscan"]["packet_rate_multiplier"] == 4.5
+    assert scenarios_by_id["portscan"]["cpu_impact"] == 25.0
+    assert scenarios_by_id["portscan"]["severity"] == "HIGH"
+
+    assert scenarios_by_id["bruteforce"]["bandwidth_multiplier"] == 1.0
+    assert scenarios_by_id["bruteforce"]["packet_rate_multiplier"] == 2.2
+    assert scenarios_by_id["bruteforce"]["cpu_impact"] == 18.0
+    assert scenarios_by_id["bruteforce"]["severity"] == "HIGH"
+
+    assert scenarios_by_id["exfiltration"]["bandwidth_multiplier"] == 4.0
+    assert scenarios_by_id["exfiltration"]["packet_rate_multiplier"] == 1.5
+    assert scenarios_by_id["exfiltration"]["cpu_impact"] == 15.0
+    assert scenarios_by_id["exfiltration"]["severity"] == "CRITICAL"
+
+    client.post("/api/demo/state", json={"active_scenario": "spike"})
+    res_telemetry = client.get("/api/demo/telemetry")
+    assert res_telemetry.status_code == 200
+    telemetry = res_telemetry.json()
+    assert telemetry["active_scenario"] == "spike"
+    assert len(telemetry["series"]) == 24
+
+
 def test_demo_state_and_update():
     """GET and POST /api/demo/state, verify multiplier updates."""
     # 1. GET initial state

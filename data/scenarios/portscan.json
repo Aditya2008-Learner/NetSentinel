@@ -1,0 +1,12 @@
+{
+  "id": "portscan",
+  "title": "Simulated Port Scan (SYN Flood)",
+  "description": "Rapid horizontal port probing across TCP ports 20-445.",
+  "bandwidth_multiplier": 1.2,
+  "packet_rate_multiplier": 4.5,
+  "cpu_impact": 25.0,
+  "threat_category": "Reconnaissance",
+  "severity": "HIGH",
+  "target_ip": "192.168.1.50",
+  "recommended_action": "Enforce firewall connection limits and isolate scanning host."
+}

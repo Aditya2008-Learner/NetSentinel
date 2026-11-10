@@ -16,3 +16,4 @@ build/
 htmlcov/
 *.db
 data/uploads/
+data/demo_state.json
