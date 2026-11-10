@@ -1068,3 +1068,24 @@ def test_demo_api_suite():
     assert res.status_code == 404
 
 
+def test_api_health():
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "NetSentinel"
+    assert data["version"] == "2.1"
+    assert "timestamp" in data
+
+
+def test_api_topology():
+    res = client.get("/api/topology")
+    assert res.status_code == 200
+    data = res.json()
+    assert "nodes" in data
+    assert "edges" in data
+    assert isinstance(data["nodes"], list)
+    assert isinstance(data["edges"], list)
+
+
+

@@ -33,7 +33,7 @@
      */
     function init() {
         // 1. Attach click handlers to all "TRY DEMO" buttons
-        document.querySelectorAll('.try-demo-btn').forEach(btn => {
+        document.querySelectorAll('.try-demo-btn:not(#top-nav-demo-toggle-btn)').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 const feature = btn.getAttribute('data-feature') || 'network_monitor';
@@ -56,7 +56,8 @@
         // 3. Top nav demo toggle button
         const topNavDemoBtn = document.getElementById('top-nav-demo-toggle-btn');
         if (topNavDemoBtn) {
-            topNavDemoBtn.addEventListener('click', () => {
+            topNavDemoBtn.addEventListener('click', (e) => {
+                e.preventDefault();
                 if (demoState.active) {
                     disable();
                 } else {
@@ -285,6 +286,13 @@
             badgeText.textContent = 'Demo Mode: Active';
         }
 
+        const topNavBtn = document.getElementById('top-nav-demo-toggle-btn');
+        if (topNavBtn) {
+            topNavBtn.innerHTML = '<i class="fa-solid fa-xmark"></i> EXIT DEMO';
+            topNavBtn.style.borderColor = 'var(--primary-accent)';
+            topNavBtn.style.color = 'var(--primary-accent)';
+        }
+
         demoState.status = 'ACTIVE';
 
         // Execute feature walkthrough
@@ -328,6 +336,13 @@
         }
         if (badgeText) {
             badgeText.textContent = 'Demo Mode Active';
+        }
+
+        const topNavBtn = document.getElementById('top-nav-demo-toggle-btn');
+        if (topNavBtn) {
+            topNavBtn.innerHTML = '<i class="fa-solid fa-flask"></i> TRY DEMO';
+            topNavBtn.style.borderColor = 'var(--accent-amber)';
+            topNavBtn.style.color = 'var(--accent-amber)';
         }
 
         // If on dashboard, reload active view with live data

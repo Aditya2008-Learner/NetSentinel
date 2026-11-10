@@ -14,7 +14,7 @@ import pathlib
 import sqlite3
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends, Header
@@ -187,6 +187,17 @@ async def healthz():
         "status": "ok" if db_ok else "degraded",
         "db": "connected" if db_ok else "unreachable",
         "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get("/api/health")
+async def api_health():
+    """Health check probe returning service health and collector status."""
+    return {
+        "status": "healthy",
+        "service": "NetSentinel",
+        "version": "2.1",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -1609,7 +1620,7 @@ async def api_add_case_timeline_event(case_id: str, payload: dict):
         conn.close()
 
 @app.get("/api/intelligence/topology")
-async def api_network_topology():
+async def api_intelligence_topology():
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -1625,6 +1636,15 @@ async def api_network_topology():
         return {"nodes": nodes, "edges": edges}
     finally:
         conn.close()
+
+
+api_network_topology = api_intelligence_topology
+
+
+@app.get("/api/topology")
+async def api_topology():
+    """Alias for /api/intelligence/topology returning network nodes and edges graph."""
+    return await api_intelligence_topology()
 
 @app.post("/api/reports/executive")
 async def api_generate_executive_report(payload: dict):
