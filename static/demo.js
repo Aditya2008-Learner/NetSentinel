@@ -243,6 +243,25 @@
     }
 
     /**
+     * Feature to View ID mapping.
+     */
+    const FEATURE_VIEW_MAP = {
+        network_monitor: 'overview-view',
+        analytics: 'analytics-view',
+        csv_analysis: 'network-view',
+        topology: 'topology-view',
+        devices: 'devices-view',
+        flows: 'live-collector-view',
+        soc_alerts: 'soc-alerts-view',
+        investigations: 'investigations-view',
+        stego: 'stego-view',
+        forensics: 'forensics-view',
+        integrity: 'integrity-view',
+        reports: 'reports-view',
+        health: 'settings-view'
+    };
+
+    /**
      * Enables demo mode, shows the persistent demo bar, updates page title, plays feedback sound, shows toast notification, and runs feature demo.
      */
     function enable(featureName) {
@@ -265,7 +284,11 @@
         }
 
         if (window.sileo) {
-            window.sileo.success(`Demo Mode Enabled: ${formatFeatureName(demoState.currentFeature)}`);
+            window.sileo.show({
+                id: 'demo-enabled-toast',
+                type: 'success',
+                message: `Demo Mode Enabled: ${formatFeatureName(demoState.currentFeature)}`
+            });
         }
 
         // Show Persistent Demo Banner
@@ -295,8 +318,18 @@
 
         demoState.status = 'ACTIVE';
 
-        // Execute feature walkthrough
-        runFeatureWalkthrough(demoState.currentFeature);
+        // Check if mapped view is active; switch if needed and populate view data
+        const viewId = FEATURE_VIEW_MAP[demoState.currentFeature];
+        if (viewId) {
+            const panel = document.getElementById(viewId);
+            const isAlreadyActive = panel && panel.classList.contains('active');
+            if (!isAlreadyActive && window.switchView) {
+                window.switchView(viewId);
+            }
+        }
+
+        // Populate data for that view
+        populateDemoForFeature(demoState.currentFeature);
     }
 
     /**
@@ -383,7 +416,7 @@
 
                 // Reload current view walkthrough, but do not re-open modal features
                 if (demoState.currentFeature !== 'health' && demoState.currentFeature !== 'threat_intel') {
-                    runFeatureWalkthrough(demoState.currentFeature);
+                    populateDemoForFeature(demoState.currentFeature);
                 }
             })
             .catch(err => {
@@ -418,8 +451,8 @@
                 if (window.sileo) {
                     window.sileo.info(`Bandwidth Multiplier updated to ${mult.toFixed(1)}x`);
                 }
-                // Refresh network monitor view
-                demoNetworkMonitor();
+                // Refresh network monitor view data
+                populateDemoNetworkMonitor();
             })
             .catch(() => {});
     }
@@ -446,8 +479,8 @@
                 const scenarioSelect = document.getElementById('attack-scenario');
                 if (scenarioSelect) scenarioSelect.value = scenario;
 
-                // Trigger chart spike or refresh current view
-                demoNetworkMonitor();
+                // Trigger chart spike or refresh current view data
+                populateDemoNetworkMonitor();
             })
             .catch(() => {});
     }
@@ -481,7 +514,7 @@
                 if (window.sileo) {
                     window.sileo.info(`Collector Status changed to: ${upper}`);
                 }
-                demoSystemHealth();
+                populateDemoSystemHealth();
             })
             .catch(() => {});
     }
@@ -560,10 +593,7 @@
         return map[feat] || 'Security Demo';
     }
 
-    function demoNetworkMonitor() {
-        if (window.switchView) {
-            window.switchView('overview-view');
-        }
+    function populateDemoNetworkMonitor() {
         fetch('/api/demo/telemetry?range=1h')
             .then(res => res.json())
             .then(data => {
@@ -572,7 +602,6 @@
                     const latest = series[series.length - 1];
                     window.updateTelemetrySeriesWithLiveMeasurements(latest.bandwidth_mbps, latest.bandwidth_mbps * 0.75, latest);
                 }
-                // Also call app.js's continuous graph loader if available
                 if (window.loadTelemetryGraph) {
                     window.loadTelemetryGraph();
                 }
@@ -580,19 +609,13 @@
             .catch(() => {});
     }
 
-    function demoAnalytics() {
-        if (window.switchView) {
-            window.switchView('analytics-view');
-        }
+    function populateDemoAnalytics() {
         if (window.sileo) {
             window.sileo.info('Loaded SOC Network Security Analytics demo telemetry.');
         }
     }
 
-    function demoCsvAnalysis() {
-        if (window.switchView) {
-            window.switchView('network-view');
-        }
+    function populateDemoCsvAnalysis() {
         fetch('/api/demo/files/csv')
             .then(res => {
                 if (!res.ok) throw new Error('Could not fetch demo CSV');
@@ -609,14 +632,13 @@
                         logFileInput.files = dt.files;
                     } catch (_) {}
                 }
-                const dropZone = document.getElementById('network-drop-zone');
                 const fileDisplay = document.getElementById('selected-file-display');
                 if (fileDisplay) {
                     fileDisplay.style.display = 'block';
                     fileDisplay.innerHTML = `<i class="fa-solid fa-file-csv"></i> <strong>net_sentinel_demo_logs.csv</strong> (${(file.size / 1024).toFixed(1)} KB)`;
                 }
                 if (window.sileo) {
-                    window.sileo.success('Demo network log CSV loaded into analyzer. Click "Analyze Traffic Logs" to execute.');
+                // CSV loaded successfully
                 }
             })
             .catch(err => {
@@ -626,83 +648,14 @@
             });
     }
 
-    function demoTopology() {
-        if (window.switchView) {
-            window.switchView('topology-view');
-        }
+    function populateDemoTopology() {
         renderDemoTopology();
         if (window.sileo) {
             window.sileo.info('Simulated C2 beacon pulse triggered on topology canvas.');
         }
     }
 
-    async function renderDemoTopology() {
-        const canvas = document.getElementById("topology-canvas");
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        try {
-            const res = await fetch("/api/intelligence/topology");
-            if (!res.ok) throw new Error("Failed to load network topology");
-            const data = await res.json();
-            const nodes = data.nodes || [];
-            const edges = data.edges || [];
-
-            const width = canvas.parentElement ? (canvas.parentElement.clientWidth || 600) : 600;
-            const height = 400;
-            canvas.width = width;
-            canvas.height = height;
-
-            ctx.clearRect(0, 0, width, height);
-
-            // Draw grid
-            ctx.strokeStyle = "rgba(38, 53, 79, 0.3)";
-            ctx.lineWidth = 1;
-            for (let x = 0; x < width; x += 40) {
-                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
-            }
-            for (let y = 0; y < height; y += 40) {
-                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
-            }
-
-            const nodePositions = {};
-            nodes.forEach((node, idx) => {
-                const angle = (idx / Math.max(nodes.length, 1)) * Math.PI * 2;
-                const radius = Math.min(width, height) * 0.32;
-                const x = width / 2 + Math.cos(angle) * radius;
-                const y = height / 2 + Math.sin(angle) * radius;
-                nodePositions[node.id] = { x, y, label: node.label };
-            });
-
-            edges.forEach(e => {
-                const p1 = nodePositions[e.src_ip];
-                const p2 = nodePositions[e.dst_ip];
-                if (p1 && p2) {
-                    ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
-                    ctx.lineWidth = 1.5;
-                    ctx.beginPath();
-                    ctx.moveTo(p1.x, p1.y);
-                    ctx.lineTo(p2.x, p2.y);
-                    ctx.stroke();
-                }
-            });
-
-            Object.values(nodePositions).forEach(pos => {
-                ctx.fillStyle = "#B7F36B";
-                ctx.beginPath();
-                ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.fillStyle = "#F1F3F5";
-                ctx.font = "11px 'JetBrains Mono', monospace";
-                ctx.fillText(pos.label, pos.x + 10, pos.y + 4);
-            });
-        } catch (_) {}
-    }
-
-    function demoDeviceInventory() {
-        if (window.switchView) {
-            window.switchView('devices-view');
-        }
+    function populateDemoDeviceInventory() {
         fetch('/api/demo/devices')
             .then(res => res.json())
             .then(devices => {
@@ -729,10 +682,7 @@
         }
     }
 
-    function demoFlowExplorer() {
-        if (window.switchView) {
-            window.switchView('live-collector-view');
-        }
+    function populateDemoFlowExplorer() {
         fetch('/api/demo/flows')
             .then(res => res.json())
             .then(flows => {
@@ -753,105 +703,7 @@
             .catch(() => {});
     }
 
-    function demoThreatIntel() {
-        if (demoState.openThreatModal) {
-            demoState.openThreatModal();
-        }
-    }
-
-    function queryDemoThreatIntel(ip) {
-        const container = document.getElementById('demo-intel-results');
-        if (container) {
-            container.innerHTML = `
-                <div style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">
-                    <i class="fa-solid fa-spinner fa-spin" style="color: var(--primary-accent); margin-right: 8px;"></i>
-                    Scanning threat intelligence databases for <code>${escapeHtml(ip)}</code>...
-                </div>
-            `;
-        }
-
-        fetch(`/api/demo/threat-intel/${encodeURIComponent(ip)}`)
-            .then(res => res.json())
-            .then(intel => {
-                if (!container) return;
-                const riskScore = typeof intel.risk_score === 'number' ? intel.risk_score : 50;
-                let riskClass = 'badge-success';
-                let riskColor = 'var(--primary-accent)';
-                if (riskScore >= 80) {
-                    riskClass = 'badge-danger';
-                    riskColor = 'var(--critical)';
-                } else if (riskScore >= 40) {
-                    riskClass = 'badge-warning';
-                    riskColor = 'var(--warning)';
-                }
-
-                const tags = Array.isArray(intel.threat_tags) ? intel.threat_tags : [];
-                const tagsHtml = tags.map(t => `<span class="badge badge-info" style="font-size: 0.7rem;">${escapeHtml(t)}</span>`).join(' ') || '<span style="color: var(--text-muted); font-size: 0.8rem;">None</span>';
-
-                container.innerHTML = `
-                    <div style="background: var(--bg-surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 16px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
-                            <div>
-                                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Queried Target:</span>
-                                <h4 style="margin: 2px 0 0; font-family: var(--font-mono); color: #fff; font-size: 1.05rem;">${escapeHtml(intel.ip)}</h4>
-                            </div>
-                            <div style="text-align: right;">
-                                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Risk Score:</span>
-                                <div><span class="badge ${riskClass}" style="font-size: 0.82rem; font-family: var(--font-mono); font-weight: 700;">${riskScore} / 100</span></div>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-3" style="font-size: 0.82rem; margin-bottom: 12px;">
-                            <div>
-                                <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase;">Classification</strong>
-                                <span style="color: ${riskColor}; font-weight: 600;">${escapeHtml(intel.classification || 'Unknown')}</span>
-                            </div>
-                            <div>
-                                <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase;">ASN / Network</strong>
-                                <span style="color: var(--text-primary); font-family: var(--font-mono);">${escapeHtml(intel.asn || 'N/A')}</span>
-                            </div>
-                            <div>
-                                <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase;">Geolocation</strong>
-                                <span style="color: var(--text-primary);"><i class="fa-solid fa-earth-americas" style="color: var(--info); margin-right: 4px;"></i> ${escapeHtml(intel.country || 'N/A')}</span>
-                            </div>
-                            <div>
-                                <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase;">Reverse DNS</strong>
-                                <span style="color: var(--text-primary); font-family: var(--font-mono);">${escapeHtml(intel.reverse_dns || 'N/A')}</span>
-                            </div>
-                        </div>
-
-                        <div style="margin-bottom: 12px;">
-                            <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase; margin-bottom: 4px;">Threat Tags</strong>
-                            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                                ${tagsHtml}
-                            </div>
-                        </div>
-
-                        <div style="background: rgba(0, 0, 0, 0.25); border-left: 2px solid ${riskColor}; padding: 8px 12px; border-radius: 4px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4;">
-                            ${escapeHtml(intel.explanation || 'No historical threat markers identified.')}
-                        </div>
-                    </div>
-                `;
-
-                if (window.NetSentinelSound) {
-                    window.NetSentinelSound.play(riskScore >= 80 ? 'alert' : 'success');
-                }
-            })
-            .catch(err => {
-                if (container) {
-                    container.innerHTML = `
-                        <div style="padding: 16px; color: var(--critical); font-size: 0.85rem; text-align: center;">
-                            <i class="fa-solid fa-circle-exclamation"></i> Failed to query threat intelligence for ${escapeHtml(ip)}.
-                        </div>
-                    `;
-                }
-            });
-    }
-
-    function demoSocAlerts() {
-        if (window.switchView) {
-            window.switchView('soc-alerts-view');
-        }
+    function populateDemoSocAlerts() {
         fetch('/api/demo/alerts')
             .then(res => res.json())
             .then(alerts => {
@@ -872,25 +724,7 @@
             .catch(() => {});
     }
 
-    function triageDemoAlert(alertId) {
-        fetch(`/api/demo/alerts/${encodeURIComponent(alertId)}/triage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'RESOLVED', analyst: 'Demo Analyst' })
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (window.NetSentinelSound) window.NetSentinelSound.play('success');
-                if (window.sileo) window.sileo.success(`Demo Alert ${alertId} resolved successfully.`);
-                demoSocAlerts();
-            })
-            .catch(() => {});
-    }
-
-    function demoInvestigations() {
-        if (window.switchView) {
-            window.switchView('investigations-view');
-        }
+    function populateDemoInvestigations() {
         fetch('/api/demo/cases')
             .then(res => res.json())
             .then(cases => {
@@ -914,10 +748,7 @@
             });
     }
 
-    function demoStego() {
-        if (window.switchView) {
-            window.switchView('stego-view');
-        }
+    function populateDemoStego() {
         fetch('/api/demo/files/stego')
             .then(res => {
                 if (!res.ok) throw new Error('Could not fetch stego carrier artifact');
@@ -952,7 +783,6 @@
                     `;
                 }
                 if (window.NetSentinelSound) window.NetSentinelSound.play('success');
-                if (window.sileo) window.sileo.success(`Secret Extracted: "${secret}"`);
             })
             .catch(err => {
                 const box = document.getElementById('extract-result');
@@ -963,10 +793,7 @@
             });
     }
 
-    function demoImageForensics() {
-        if (window.switchView) {
-            window.switchView('forensics-view');
-        }
+    function populateDemoImageForensics() {
         fetch('/api/demo/files/stego')
             .then(res => res.blob())
             .then(blob => {
@@ -994,10 +821,7 @@
             .catch(() => {});
     }
 
-    function demoIntegrity() {
-        if (window.switchView) {
-            window.switchView('integrity-view');
-        }
+    function populateDemoIntegrity() {
         fetch('/api/demo/files/baseline_info')
             .then(res => res.json())
             .then(info => {
@@ -1018,15 +842,12 @@
                         </div>
                     `;
                 }
-                if (window.sileo) window.sileo.success('File integrity comparison loaded successfully.');
+                // integrity loaded successfully
             })
             .catch(() => {});
     }
 
-    function demoReports() {
-        if (window.switchView) {
-            window.switchView('reports-view');
-        }
+    function populateDemoReports() {
         const pdfLink = document.getElementById('demo-download-pdf-btn');
         if (pdfLink) {
             pdfLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1039,7 +860,7 @@
         if (window.sileo) window.sileo.success('Consolidated Demo PDF Investigation Report generated and opened.');
     }
 
-    function demoSystemHealth() {
+    function populateDemoSystemHealth() {
         fetch('/api/demo/health')
             .then(res => res.json())
             .then(h => {
@@ -1069,7 +890,6 @@
                 if (rateVal) rateVal.textContent = `${drop.toFixed(2)}%`;
                 if (rateBar) rateBar.style.width = `${Math.min(100, drop * 20)}%`;
 
-                // Update toggle state buttons active class
                 const curState = (h.collector_status || 'LIVE').toUpperCase();
                 document.querySelectorAll('.demo-collector-toggle-btn').forEach(btn => {
                     if (btn.getAttribute('data-state') === curState) {
@@ -1094,46 +914,208 @@
             });
     }
 
+    function populateDemoForFeature(feature) {
+        switch (feature) {
+            case 'network_monitor':
+                populateDemoNetworkMonitor();
+                break;
+            case 'analytics':
+                populateDemoAnalytics();
+                break;
+            case 'csv_analysis':
+                populateDemoCsvAnalysis();
+                break;
+            case 'topology':
+                populateDemoTopology();
+                break;
+            case 'devices':
+                populateDemoDeviceInventory();
+                break;
+            case 'flows':
+                populateDemoFlowExplorer();
+                break;
+            case 'threat_intel':
+                demoThreatIntel();
+                break;
+            case 'soc_alerts':
+                populateDemoSocAlerts();
+                break;
+            case 'investigations':
+                populateDemoInvestigations();
+                break;
+            case 'stego':
+                populateDemoStego();
+                break;
+            case 'forensics':
+                populateDemoImageForensics();
+                break;
+            case 'integrity':
+                populateDemoIntegrity();
+                break;
+            case 'reports':
+                populateDemoReports();
+                break;
+            case 'health':
+                populateDemoSystemHealth();
+                break;
+            default:
+                populateDemoNetworkMonitor();
+                break;
+        }
+    }
+
+    function demoNetworkMonitor() {
+        const viewId = 'overview-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoNetworkMonitor();
+    }
+
+    function demoAnalytics() {
+        const viewId = 'analytics-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoAnalytics();
+    }
+
+    function demoCsvAnalysis() {
+        const viewId = 'network-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoCsvAnalysis();
+    }
+
+    function demoTopology() {
+        const viewId = 'topology-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoTopology();
+    }
+
+    function demoDeviceInventory() {
+        const viewId = 'devices-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoDeviceInventory();
+    }
+
+    function demoFlowExplorer() {
+        const viewId = 'live-collector-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoFlowExplorer();
+    }
+
+    function demoSocAlerts() {
+        const viewId = 'soc-alerts-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoSocAlerts();
+    }
+
+    function demoInvestigations() {
+        const viewId = 'investigations-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoInvestigations();
+    }
+
+    function demoStego() {
+        const viewId = 'stego-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoStego();
+    }
+
+    function demoImageForensics() {
+        const viewId = 'forensics-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoImageForensics();
+    }
+
+    function demoIntegrity() {
+        const viewId = 'integrity-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoIntegrity();
+    }
+
+    function demoReports() {
+        const viewId = 'reports-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        populateDemoReports();
+    }
+
+    function demoSystemHealth() {
+        populateDemoSystemHealth();
+    }
+
     // ==========================================================================
-    // onViewSwitched - Maps view panel IDs to walkthrough functions
+    // onViewSwitched - Maps view panel IDs to populate functions
     // ==========================================================================
     function onViewSwitched(targetId) {
         switch (targetId) {
             case 'overview-view':
-                demoNetworkMonitor();
+                populateDemoNetworkMonitor();
                 break;
             case 'analytics-view':
-                demoAnalytics();
+                populateDemoAnalytics();
                 break;
             case 'network-view':
-                demoCsvAnalysis();
+                populateDemoCsvAnalysis();
                 break;
             case 'topology-view':
-                demoTopology();
+                populateDemoTopology();
                 break;
             case 'devices-view':
-                demoDeviceInventory();
+                populateDemoDeviceInventory();
                 break;
             case 'live-collector-view':
-                demoFlowExplorer();
+                populateDemoFlowExplorer();
                 break;
             case 'soc-alerts-view':
-                demoSocAlerts();
+                populateDemoSocAlerts();
                 break;
             case 'investigations-view':
-                demoInvestigations();
+                populateDemoInvestigations();
                 break;
             case 'stego-view':
-                demoStego();
+                populateDemoStego();
                 break;
             case 'forensics-view':
-                demoImageForensics();
+                populateDemoImageForensics();
                 break;
             case 'integrity-view':
-                demoIntegrity();
+                populateDemoIntegrity();
                 break;
             case 'reports-view':
-                demoReports();
+                populateDemoReports();
                 break;
             case 'settings-view':
                 break;
@@ -1181,13 +1163,28 @@
         demoReports: demoReports,
         demoSystemHealth: demoSystemHealth,
 
-        // Function aliases expected by app.js
-        loadDemoOverview: demoNetworkMonitor,
-        loadDemoDevices: demoDeviceInventory,
-        loadDemoFlows: demoFlowExplorer,
-        loadDemoSocAlerts: demoSocAlerts,
-        loadDemoTopology: demoTopology,
-        loadDemoInvestigations: demoInvestigations
+        // Separate data population functions (no switchView)
+        populateDemoNetworkMonitor: populateDemoNetworkMonitor,
+        populateDemoAnalytics: populateDemoAnalytics,
+        populateDemoCsvAnalysis: populateDemoCsvAnalysis,
+        populateDemoTopology: populateDemoTopology,
+        populateDemoDeviceInventory: populateDemoDeviceInventory,
+        populateDemoFlowExplorer: populateDemoFlowExplorer,
+        populateDemoSocAlerts: populateDemoSocAlerts,
+        populateDemoInvestigations: populateDemoInvestigations,
+        populateDemoStego: populateDemoStego,
+        populateDemoImageForensics: populateDemoImageForensics,
+        populateDemoIntegrity: populateDemoIntegrity,
+        populateDemoReports: populateDemoReports,
+        populateDemoSystemHealth: populateDemoSystemHealth,
+
+        // Function aliases expected by app.js mapped to populateDemo*
+        loadDemoOverview: populateDemoNetworkMonitor,
+        loadDemoDevices: populateDemoDeviceInventory,
+        loadDemoFlows: populateDemoFlowExplorer,
+        loadDemoSocAlerts: populateDemoSocAlerts,
+        loadDemoTopology: populateDemoTopology,
+        loadDemoInvestigations: populateDemoInvestigations
     };
 
     // Auto-init on DOM content loaded

@@ -207,6 +207,17 @@ let currentAnalyticsRange = "24H";
 
 // View switching with coordinated fade and spring animation
 function switchView(targetId) {
+    const currentActive = document.querySelector(".view-panel.active");
+    if (currentActive && currentActive.id === targetId && currentActive.style.opacity === "1" && currentActive.style.display === "block") {
+        // View is already fully active and visible; avoid fading out or resetting DOM
+        if (isDemoModeActive()) {
+            if (window.NetSentinelDemo && typeof window.NetSentinelDemo.onViewSwitched === "function") {
+                window.NetSentinelDemo.onViewSwitched(targetId);
+            }
+        }
+        return;
+    }
+
     if (window.NetSentinelSound) {
         window.NetSentinelSound.play("click");
     }
@@ -221,16 +232,22 @@ function switchView(targetId) {
 
     // Fade out current views
     viewPanels.forEach(panel => {
-        panel.style.opacity = "0";
-        panel.style.transition = "opacity 0.2s ease";
+        if (panel.id !== targetId) {
+            panel.style.opacity = "0";
+            panel.style.transition = "opacity 0.2s ease";
+        }
     });
 
     // Switch active view panel
     _switchViewTimer = setTimeout(() => {
+        _switchViewTimer = null;
         navItems.forEach(nav => nav.classList.remove("active"));
         viewPanels.forEach(panel => {
-            panel.classList.remove("active");
-            panel.style.display = "none";
+            if (panel.id !== targetId) {
+                panel.classList.remove("active");
+                panel.style.display = "none";
+                panel.style.opacity = "0";
+            }
         });
 
         // Show and fade in new view
@@ -2009,7 +2026,9 @@ function initForms() {
 
 const sileo = (function() {
     const DEFAULT_DURATION = 4000;
-    const MAX_STACK = 5;
+    const MAX_STACK = 3;
+    const DEDUP_WINDOW_MS = 3500;
+    const _recentNotifications = new Map();
 
     const DEFAULT_ICONS = {
         success: 'fa-solid fa-circle-check',
@@ -2017,6 +2036,15 @@ const sileo = (function() {
         warning: 'fa-solid fa-triangle-exclamation',
         info: 'fa-solid fa-circle-info'
     };
+
+    function pruneRecentNotifications() {
+        const now = Date.now();
+        for (const [key, timestamp] of _recentNotifications.entries()) {
+            if (now - timestamp > 15000) {
+                _recentNotifications.delete(key);
+            }
+        }
+    }
 
     function getToaster() {
         let toaster = document.getElementById('sileo-toaster');
@@ -2043,6 +2071,10 @@ const sileo = (function() {
             if (e && (e.target !== toast || e.animationName !== 'sileo-exit')) return;
             if (cleaned) return;
             cleaned = true;
+            if (toast._sileoTimer) {
+                clearTimeout(toast._sileoTimer);
+                toast._sileoTimer = null;
+            }
             toast.removeEventListener('animationend', cleanup);
             if (toast.parentNode) {
                 toast.remove();
@@ -2065,6 +2097,22 @@ const sileo = (function() {
             rawDesc = String(config.message);
         }
 
+        pruneRecentNotifications();
+
+        const dedupKey = config.id || (type + ':' + rawTitle + ':' + rawDesc);
+        const now = Date.now();
+        if (_recentNotifications.has(dedupKey) && (now - _recentNotifications.get(dedupKey)) < DEDUP_WINDOW_MS) {
+            const toaster = getToaster();
+            const existingToast = Array.from(toaster.querySelectorAll('.sileo-toast:not(.sileo-toast-leaving)')).find(t => {
+                if (config.id) return t.id === config.id || t.dataset.sileoId === config.id;
+                return t.dataset.sileoDedupKey === dedupKey;
+            });
+            if (existingToast) {
+                return existingToast.dataset.sileoId || existingToast.id;
+            }
+        }
+        _recentNotifications.set(dedupKey, now);
+
         const duration = typeof config.duration === 'number' ? config.duration : DEFAULT_DURATION;
         const dismissible = config.dismissible !== false;
         const id = config.id || ('sileo-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
@@ -2081,6 +2129,7 @@ const sileo = (function() {
         const toast = document.createElement('div');
         toast.id = id;
         toast.dataset.sileoId = id;
+        toast.dataset.sileoDedupKey = dedupKey;
         toast.className = `sileo-toast sileo-toast-${type}`;
         toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
         toast.setAttribute('aria-atomic', 'true');
