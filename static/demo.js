@@ -964,6 +964,142 @@
         }
     }
 
+    function triageDemoAlert(alertId) {
+        if (!alertId) return;
+        fetch(`/api/demo/alerts/${encodeURIComponent(alertId)}/triage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'RESOLVED', analyst: 'Demo Analyst' })
+        })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                if (window.NetSentinelSound) window.NetSentinelSound.play('success');
+                if (window.sileo) window.sileo.success(`Demo Alert ${alertId} resolved successfully.`);
+                populateDemoSocAlerts();
+            })
+            .catch(err => {
+                if (window.sileo) window.sileo.error(`Failed to triage alert ${alertId}.`);
+            });
+    }
+
+    function queryDemoThreatIntel(ip) {
+        const container = document.getElementById('demo-intel-results');
+        if (container) {
+            container.innerHTML = `
+                <div style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">
+                    <i class="fa-solid fa-spinner fa-spin" style="color: var(--primary-accent); margin-right: 8px;"></i>
+                    Scanning threat intelligence databases for <code>${escapeHtml(ip)}</code>...
+                </div>
+            `;
+        }
+
+        fetch(`/api/demo/threat-intel/${encodeURIComponent(ip)}`)
+            .then(res => res.json())
+            .then(intel => {
+                if (!container) return;
+                const riskScore = typeof intel.risk_score === 'number' ? intel.risk_score : 50;
+                let riskClass = 'badge-success';
+                let riskColor = 'var(--primary-accent)';
+                if (riskScore >= 80) {
+                    riskClass = 'badge-danger';
+                    riskColor = 'var(--critical)';
+                } else if (riskScore >= 40) {
+                    riskClass = 'badge-warning';
+                    riskColor = 'var(--warning)';
+                }
+
+                const tags = Array.isArray(intel.threat_tags) ? intel.threat_tags : [];
+                const tagsHtml = tags.map(t => `<span class="badge badge-info" style="font-size: 0.7rem;">${escapeHtml(t)}</span>`).join(' ') || '<span style="color: var(--text-muted); font-size: 0.8rem;">None</span>';
+
+                container.innerHTML = `
+                    <div style="background: var(--bg-surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+                            <div>
+                                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Queried Target:</span>
+                                <h4 style="margin: 2px 0 0; font-family: var(--font-mono); color: #fff; font-size: 1.05rem;">${escapeHtml(intel.ip)}</h4>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Risk Score:</span>
+                                <div><span class="badge ${riskClass}" style="font-size: 0.82rem; font-family: var(--font-mono); font-weight: 700;">${riskScore} / 100</span></div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3" style="font-size: 0.82rem; margin-bottom: 12px;">
+                            <div>
+                                <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase;">Classification</strong>
+                                <span style="color: ${riskColor}; font-weight: 600;">${escapeHtml(intel.classification || 'Unknown')}</span>
+                            </div>
+                            <div>
+                                <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase;">ASN / Network</strong>
+                                <span style="color: var(--text-primary); font-family: var(--font-mono);">${escapeHtml(intel.asn || 'N/A')}</span>
+                            </div>
+                            <div>
+                                <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase;">Geolocation</strong>
+                                <span style="color: var(--text-primary);"><i class="fa-solid fa-earth-americas" style="color: var(--info); margin-right: 4px;"></i> ${escapeHtml(intel.country || 'N/A')}</span>
+                            </div>
+                            <div>
+                                <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase;">Reverse DNS</strong>
+                                <span style="color: var(--text-primary); font-family: var(--font-mono);">${escapeHtml(intel.reverse_dns || 'N/A')}</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 12px;">
+                            <strong style="color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase; margin-bottom: 4px;">Threat Tags</strong>
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                ${tagsHtml}
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(0, 0, 0, 0.25); border-left: 2px solid ${riskColor}; padding: 8px 12px; border-radius: 4px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4;">
+                            ${escapeHtml(intel.explanation || 'No historical threat markers identified.')}
+                        </div>
+                    </div>
+                `;
+
+                if (window.NetSentinelSound) {
+                    window.NetSentinelSound.play(riskScore >= 80 ? 'alert' : 'success');
+                }
+            })
+            .catch(err => {
+                if (container) {
+                    container.innerHTML = `
+                        <div style="padding: 16px; color: var(--critical); font-size: 0.85rem; text-align: center;">
+                            <i class="fa-solid fa-circle-exclamation"></i> Failed to query threat intelligence for ${escapeHtml(ip)}.
+                        </div>
+                    `;
+                }
+            });
+    }
+
+    function demoThreatIntel() {
+        const viewId = 'overview-view';
+        const panel = document.getElementById(viewId);
+        if (panel && !panel.classList.contains('active') && window.switchView) {
+            window.switchView(viewId);
+        }
+        if (demoState.openThreatModal) {
+            demoState.openThreatModal();
+        } else {
+            const modal = document.getElementById('demo-threat-intel-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                queryDemoThreatIntel('198.51.100.14');
+            }
+        }
+    }
+
+    function renderDemoTopology() {
+        if (window.renderTopology) {
+            window.renderTopology();
+        }
+        if (window.NetSentinelSound) {
+            window.NetSentinelSound.play('success');
+        }
+    }
+
     function demoNetworkMonitor() {
         const viewId = 'overview-view';
         const panel = document.getElementById(viewId);
@@ -1128,6 +1264,8 @@
     window.NetSentinelDemo = {
         // State getters
         isDemoMode: () => demoState.active,
+        isActive: () => demoState.active,
+        get active() { return demoState.active; },
         getState: () => ({ ...demoState }),
         getStatus: () => demoState.status,
 
@@ -1146,6 +1284,7 @@
         toggleCollectorState: toggleCollectorState,
         inspectDevice: inspectDevice,
         triageDemoAlert: triageDemoAlert,
+        queryDemoThreatIntel: queryDemoThreatIntel,
 
         // Feature walkthroughs
         demoNetworkMonitor: demoNetworkMonitor,
@@ -1162,6 +1301,7 @@
         demoIntegrity: demoIntegrity,
         demoReports: demoReports,
         demoSystemHealth: demoSystemHealth,
+        renderDemoTopology: renderDemoTopology,
 
         // Separate data population functions (no switchView)
         populateDemoNetworkMonitor: populateDemoNetworkMonitor,
