@@ -43,6 +43,24 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+async function withButtonSpin(btn, asyncFn) {
+    if (!btn || btn.disabled || btn.classList.contains("is-refreshing")) return;
+    btn.disabled = true;
+    btn.classList.add("is-refreshing");
+    const icon = btn.querySelector("i");
+    if (icon) icon.classList.add("fa-spin");
+    if (window.NetSentinelSound) window.NetSentinelSound.play("click");
+    try {
+        await asyncFn();
+    } finally {
+        setTimeout(() => {
+            if (icon) icon.classList.remove("fa-spin");
+            btn.disabled = false;
+            btn.classList.remove("is-refreshing");
+        }, 300);
+    }
+}
+
 // Pause polling when the tab is hidden; resume when visible again.
 document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
@@ -121,7 +139,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (telemetryAttackBtn) telemetryAttackBtn.addEventListener("click", triggerAttackSimulation);
 
     const telemetryResetBtn = document.getElementById("telemetry-reset-btn");
-    if (telemetryResetBtn) telemetryResetBtn.addEventListener("click", resetAttackSimulation);
+    if (telemetryResetBtn) telemetryResetBtn.addEventListener("click", () => withButtonSpin(telemetryResetBtn, resetAttackSimulation));
 
     document.querySelectorAll(".analytics-range-btn").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -137,19 +155,25 @@ document.addEventListener("DOMContentLoaded", () => {
     if (loadSampleCsvBtn) loadSampleCsvBtn.addEventListener("click", loadSampleCsv);
 
     const refreshHistoryBtn = document.getElementById("refresh-history-btn");
-    if (refreshHistoryBtn) refreshHistoryBtn.addEventListener("click", loadAnalysisHistory);
+    if (refreshHistoryBtn) refreshHistoryBtn.addEventListener("click", () => withButtonSpin(refreshHistoryBtn, loadAnalysisHistory));
 
     const refreshCollectorBtn = document.getElementById("refresh-collector-btn");
-    if (refreshCollectorBtn) refreshCollectorBtn.addEventListener("click", loadLiveCollectorData);
+    if (refreshCollectorBtn) refreshCollectorBtn.addEventListener("click", () => withButtonSpin(refreshCollectorBtn, loadLiveCollectorData));
 
     const refreshDevicesBtn = document.getElementById("refresh-devices-btn");
-    if (refreshDevicesBtn) refreshDevicesBtn.addEventListener("click", loadDevices);
+    if (refreshDevicesBtn) refreshDevicesBtn.addEventListener("click", () => withButtonSpin(refreshDevicesBtn, loadDevices));
 
     const addDeviceModalBtn = document.getElementById("add-device-modal-btn");
     if (addDeviceModalBtn) addDeviceModalBtn.addEventListener("click", openNewDeviceModal);
 
     const refreshInvestigationsBtn = document.getElementById("refresh-investigations-btn");
-    if (refreshInvestigationsBtn) refreshInvestigationsBtn.addEventListener("click", loadInvestigations);
+    if (refreshInvestigationsBtn) refreshInvestigationsBtn.addEventListener("click", () => withButtonSpin(refreshInvestigationsBtn, loadInvestigations));
+
+    const refreshSocAlertsBtn = document.getElementById("refresh-soc-alerts-btn");
+    if (refreshSocAlertsBtn) refreshSocAlertsBtn.addEventListener("click", () => withButtonSpin(refreshSocAlertsBtn, loadSocAlerts));
+
+    const refreshTopologyBtn = document.getElementById("refresh-topology-btn");
+    if (refreshTopologyBtn) refreshTopologyBtn.addEventListener("click", () => withButtonSpin(refreshTopologyBtn, loadNetworkTopology));
 
     const addInvestigationModalBtn = document.getElementById("add-investigation-modal-btn");
     if (addInvestigationModalBtn) addInvestigationModalBtn.addEventListener("click", openNewInvestigationModal);
@@ -369,6 +393,7 @@ async function loadLiveCollectorData() {
         renderLiveProtocolDonut(data.protocols || []);
     } catch (err) {
         console.error("Failed to load live collector data", err);
+        showNotification("Failed to load live collector data", "error");
     }
 }
 
@@ -1216,26 +1241,31 @@ function getInvestigationBadgeClass(status) {
     return "badge-info";
 }
 
-function loadInvestigations() {
+async function loadInvestigations() {
     if (isDemoModeActive()) {
+        const tbody = document.querySelector("#investigations-table tbody");
+        if (tbody) {
+            tbody.innerHTML = `<tr><td><code>CASE-DEMO-001</code></td><td><strong>Simulated Incident Investigation</strong></td><td>INC-DEMO-001</td><td><span class="badge badge-success">Active</span></td><td>2024-01-15 14:32:11Z</td></tr>`;
+        }
         const demoFn = window.NetSentinelDemo && (window.NetSentinelDemo.loadDemoInvestigations || window.NetSentinelDemo.demoInvestigations);
         if (typeof demoFn === "function") {
             demoFn.call(window.NetSentinelDemo);
         }
         return;
     }
-    return fetch("/api/investigations")
-        .then(res => res.json())
-        .then(investigations => {
-            const tbody = document.querySelector("#investigations-table tbody");
-            if (!tbody) return;
+    try {
+        const res = await fetch("/api/investigations");
+        if (!res.ok) throw new Error("Failed to load investigations");
+        const investigations = await res.json();
+        const tbody = document.querySelector("#investigations-table tbody");
+        if (!tbody) return;
 
-            if (investigations.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No investigation cases found.</td></tr>`;
-                return;
-            }
+        if (investigations.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No investigation cases found.</td></tr>`;
+            return;
+        }
 
-            tbody.innerHTML = investigations.map(inv => `
+        tbody.innerHTML = investigations.map(inv => `
                 <tr>
                     <td><code>${escapeHtml(inv.id)}</code></td>
                     <td><strong>${escapeHtml(inv.title)}</strong></td>
@@ -1244,10 +1274,10 @@ function loadInvestigations() {
                     <td>${escapeHtml(inv.created_at)}</td>
                 </tr>
             `).join("");
-        })
-        .catch(err => {
-            console.error("Failed to load investigations", err);
-        });
+    } catch (err) {
+        console.error("Failed to load investigations", err);
+        showNotification("Failed to load investigations", "error");
+    }
 }
 
 // Form initialization
@@ -2403,6 +2433,10 @@ async function deleteDevice(deviceId) {
 
 async function loadAnalysisHistory() {
     if (isDemoModeActive()) {
+        const tbody = document.getElementById("analysis-history-tbody");
+        if (tbody) {
+            tbody.innerHTML = `<tr><td>${new Date().toISOString().replace("T", " ").substring(0, 19)} +0000</td><td><code>demo_ingestion_2024-01-15.log</code></td><td>Network Analysis</td><td>15,842</td><td><span class="badge badge-success">0 threats</span></td><td><span class="badge badge-info">Completed</span></td></tr>`;
+        }
         return;
     }
     try {
@@ -2437,6 +2471,7 @@ async function loadAnalysisHistory() {
         }).join("");
     } catch (err) {
         console.error("Failed to load analysis history", err);
+        showNotification("Failed to load analysis history", "error");
     }
 }
 
@@ -3722,6 +3757,7 @@ async function loadNetworkTopology() {
         });
     } catch (err) {
         console.error(err);
+        showNotification("Failed to load network topology", "error");
     }
 }
 

@@ -67,9 +67,25 @@
         }
 
         // 4. Wire up Persistent Demo Banner buttons
+        let _resetInProgress = false;
         const bannerResetBtn = document.getElementById('demo-banner-reset-btn');
         if (bannerResetBtn) {
-            bannerResetBtn.addEventListener('click', reset);
+            bannerResetBtn.addEventListener('click', async () => {
+                if (_resetInProgress || bannerResetBtn.disabled) return;
+                _resetInProgress = true;
+                bannerResetBtn.disabled = true;
+                const icon = bannerResetBtn.querySelector('i');
+                if (icon) icon.classList.add('fa-spin');
+                try {
+                    await reset();
+                } finally {
+                    setTimeout(() => {
+                        if (icon) icon.classList.remove('fa-spin');
+                        bannerResetBtn.disabled = false;
+                        _resetInProgress = false;
+                    }, 300);
+                }
+            });
         }
 
         const bannerExitBtn = document.getElementById('demo-banner-exit-btn');
@@ -398,7 +414,7 @@
      * Resets demo data via POST /api/demo/reset.
      */
     function reset() {
-        fetch('/api/demo/reset', { method: 'POST' })
+        return fetch('/api/demo/reset', { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if (window.NetSentinelSound) {
@@ -656,7 +672,7 @@
     }
 
     function populateDemoDeviceInventory() {
-        fetch('/api/demo/devices')
+        return fetch('/api/demo/devices')
             .then(res => res.json())
             .then(devices => {
                 const tbody = document.getElementById('devices-table-body');
@@ -683,7 +699,7 @@
     }
 
     function populateDemoFlowExplorer() {
-        fetch('/api/demo/flows')
+        return fetch('/api/demo/flows')
             .then(res => res.json())
             .then(flows => {
                 const tbody = document.getElementById('live-flows-tbody');
@@ -704,7 +720,7 @@
     }
 
     function populateDemoSocAlerts() {
-        fetch('/api/demo/alerts')
+        return fetch('/api/demo/alerts')
             .then(res => res.json())
             .then(alerts => {
                 const tbody = document.getElementById('soc-alerts-tbody');
@@ -725,7 +741,7 @@
     }
 
     function populateDemoInvestigations() {
-        fetch('/api/demo/cases')
+        return fetch('/api/demo/cases')
             .then(res => res.json())
             .then(cases => {
                 const tbody = document.querySelector('#investigations-table tbody');
@@ -743,13 +759,11 @@
                     window.sileo.info('Loaded simulated digital forensics incident investigations.');
                 }
             })
-            .catch(() => {
-                if (window.loadInvestigations) window.loadInvestigations();
-            });
+            .catch(() => {});
     }
 
     function populateDemoStego() {
-        fetch('/api/demo/files/stego')
+        return fetch('/api/demo/files/stego')
             .then(res => {
                 if (!res.ok) throw new Error('Could not fetch stego carrier artifact');
                 return res.blob();
