@@ -1,0 +1,19 @@
+{
+  "entry": [
+    "main.py",
+    "app/**/*.py",
+    "collector/**/*.py",
+    "scripts/**/*.py",
+    "static/**/*.js"
+  ],
+  "project": [
+    "**/*.js",
+    "**/*.mjs"
+  ],
+  "ignore": [
+    "tests/**"
+  ],
+  "ignoreDependencies": [
+    "@knip/mcp"
+  ]
+}

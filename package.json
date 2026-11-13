@@ -1,0 +1,29 @@
+{
+  "name": "netsentinel",
+  "version": "1.0.0",
+  "description": "**Network Intelligence. Threat Detection. Digital Forensics.**",
+  "main": "main.py",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aditya2008-Learner/NetSentinel.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Aditya2008-Learner/NetSentinel/issues"
+  },
+  "homepage": "https://github.com/Aditya2008-Learner/NetSentinel#readme",
+  "devDependencies": {
+    "@knip/mcp": "^0.0.38",
+    "knip": "^6.45.1"
+  }
+}
