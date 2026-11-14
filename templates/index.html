@@ -25,8 +25,8 @@
     <div class="app-container">
         <!-- Sidebar Navigation -->
         <aside class="sidebar" id="sidebar">
-            <a href="/" class="brand-area" style="text-decoration: none; display: flex; align-items: center; gap: 12px; color: inherit;" title="Return to Net Sentinel Landing Page">
-                <span class="brand-symbol" style="width: 14px; height: 14px; background-color: var(--primary-accent); border-radius: var(--radius-sm); box-shadow: 0 0 10px rgba(183, 243, 107, 0.4); display: inline-block;"></span>
+            <a href="/" class="brand-area" title="Return to Net Sentinel Landing Page">
+                <span class="brand-symbol"></span>
                 <div class="brand-text">
                     <h2>NET SENTINEL</h2>
                     <span>SIGNAL / EVIDENCE</span>
@@ -76,8 +76,8 @@
             </nav>
 
             <div class="sidebar-footer">
-                <a href="/" class="sidebar-home-link" style="display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px; text-decoration: none; padding: 6px 8px; border-radius: 6px; transition: all 0.2s; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
-                    <i class="fa-solid fa-arrow-left" style="font-size: 0.75rem;"></i>
+                <a href="/" class="sidebar-home-link">
+                    <i class="fa-solid fa-arrow-left"></i>
                     <span>Product Overview</span>
                 </a>
                 <div class="status-badge demo-badge" id="sidebar-demo-badge" style="cursor: pointer;" title="Toggle NetSentinel Demo Mode">
@@ -90,13 +90,13 @@
         <main class="main-content">
             <!-- Top Navigation Bar -->
             <header class="top-nav">
-                <div class="breadcrumb" style="display: flex; align-items: center; gap: 8px;">
-                    <a href="/" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; transition: color 0.2s;" title="Return to Landing Page"><i class="fa-solid fa-house"></i></a>
-                    <span style="color: var(--border-color); font-size: 0.8rem;">/</span>
+                <div class="breadcrumb">
+                    <a href="/" class="breadcrumb-home" title="Return to Landing Page"><i class="fa-solid fa-house"></i></a>
+                    <span class="breadcrumb-sep" aria-hidden="true">/</span>
                     <span id="current-page-title">Overview Dashboard</span>
                 </div>
                 <div class="top-nav-right">
-                    <button type="button" class="btn btn-secondary try-demo-btn" id="top-nav-demo-toggle-btn" style="border-color: var(--accent-amber); color: var(--accent-amber); font-weight: 600; padding: 6px 12px; font-size: 0.8rem;">
+                    <button type="button" class="btn btn-secondary try-demo-btn" id="top-nav-demo-toggle-btn">
                         <i class="fa-solid fa-flask"></i> TRY DEMO
                     </button>
                     <div class="search-box" style="position: relative; cursor: pointer;" id="search-box-trigger" title="Press Ctrl+K to open Command Palette">
@@ -106,7 +106,7 @@
                         <div id="search-results-dropdown" class="search-results-dropdown hidden"></div>
                     </div>
                     <div style="position: relative;">
-                        <button type="button" class="btn btn-secondary" id="notification-bell-btn" title="Live Incident Notifications" aria-label="Incident Notifications" style="padding: 7px 12px; position: relative;">
+                        <button type="button" class="btn btn-secondary btn-icon" id="notification-bell-btn" title="Live Incident Notifications" aria-label="Incident Notifications">
                             <i class="fa-regular fa-bell"></i>
                             <span class="notification-badge hidden" id="notification-badge">0</span>
                         </button>
@@ -114,11 +114,11 @@
                             <div class="notification-header">
                                 <span style="font-weight: 700; font-size: 0.85rem;"><i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i> Live Incidents</span>
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <label class="sound-toggle-label" title="Toggle Audio Alert Chimes" style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--text-muted);">
+                                    <label class="sound-toggle-label" title="Toggle Audio Alert Chimes">
                                         <input type="checkbox" id="notification-sound-toggle" checked style="accent-color: var(--accent-emerald);" />
                                         <i class="fa-solid fa-volume-high" id="sound-icon"></i>
                                     </label>
-                                    <button type="button" class="btn-text" id="clear-notifications-btn" style="background: none; border: none; font-size: 0.72rem; color: var(--text-muted); cursor: pointer;">Clear All</button>
+                                    <button type="button" class="btn-text" id="clear-notifications-btn">Clear All</button>
                                 </div>
                             </div>
                             <div id="notification-items-container" class="notification-items-list">
@@ -151,7 +151,6 @@
                 <section id="overview-view" class="view-panel active">
                     <div class="welcome-banner">
                         <div class="banner-text">
-                            <span class="badge badge-info" style="margin-bottom: 8px; display: inline-flex; font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;">SIGNAL / EVIDENCE &bull; LAB 001</span>
                             <h1>Every connection leaves a trace.</h1>
                             <p>Precision-engineered digital intelligence, threat detection, and forensic evidence verification workspace.</p>
                         </div>
@@ -162,14 +161,14 @@
                             <button class="btn btn-secondary" data-action="switch-view" data-target="network-view">
                                 <i class="fa-solid fa-shield"></i> Network Security
                             </button>
-                            <div class="demo-controls-toolbar" id="overview-demo-controls" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <div class="demo-controls-toolbar" id="overview-demo-controls">
                                 <button type="button" class="btn btn-sm btn-secondary try-demo-btn" data-feature="network_monitor" id="overview-try-demo-btn" title="Launch Network Monitor Simulation">
                                     <i class="fa-solid fa-flask"></i> TRY DEMO
                                 </button>
-                                <div style="display: inline-flex; align-items: center; gap: 6px; background: var(--bg-surface-inset); padding: 4px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-default);">
-                                    <label for="demo-bandwidth-multiplier" style="font-size: 0.75rem; color: var(--text-secondary); margin: 0; white-space: nowrap;">Bandwidth:</label>
-                                    <input type="range" id="demo-bandwidth-multiplier" min="0.5" max="5.0" step="0.5" value="1.0" style="width: 75px; accent-color: var(--primary-accent); cursor: pointer;" />
-                                    <span id="demo-bandwidth-multiplier-val" style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--primary-accent); min-width: 32px;">1.0x</span>
+                                <div class="bandwidth-control">
+                                    <label for="demo-bandwidth-multiplier">Bandwidth</label>
+                                    <input type="range" id="demo-bandwidth-multiplier" min="0.5" max="5.0" step="0.5" value="1.0" />
+                                    <span id="demo-bandwidth-multiplier-val">1.0x</span>
                                 </div>
                                 <button type="button" class="btn btn-sm btn-secondary" id="overview-demo-spike-btn" title="Trigger Instant Traffic Spike">
                                     <i class="fa-solid fa-bolt" style="color: var(--warning);"></i> Spike
