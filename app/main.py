@@ -1859,3 +1859,142 @@ async def api_demo_files(file_type: str):
             detail=f"Unknown file type: '{file_type}'. Supported: 'csv', 'carrier', 'stego', 'clean', 'tampered', 'baseline_info'."
         )
 
+
+# --- SaaS Authentication & Billing API ---
+import hashlib
+import hmac
+import secrets
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('ascii'), 100000).hex()
+    return f"{salt}${pwd_hash}"
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        salt, pwd_hash = stored.split('$')
+        computed = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('ascii'), 100000).hex()
+        return hmac.compare_digest(computed, pwd_hash)
+    except Exception:
+        return False
+
+@app.post("/api/auth/register")
+async def api_register(
+    email: str = Form(...),
+    password: str = Form(...),
+    full_name: Optional[str] = Form(None),
+    org_name: Optional[str] = Form(None),
+):
+    clean_email = email.strip().lower()
+    if not clean_email or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id FROM users WHERE email = ?", (clean_email,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        org_id = f"ORG-{uuid.uuid4().hex[:8]}"
+        org_n = (org_name or "My Organization").strip()
+        cursor.execute(
+            "INSERT INTO organizations (org_id, name, tier, subscription_status) VALUES (?, ?, 'Free', 'active')",
+            (org_id, org_n)
+        )
+        
+        user_id = f"USER-{uuid.uuid4().hex[:8]}"
+        pw_hashed = _hash_password(password)
+        cursor.execute(
+            "INSERT INTO users (user_id, org_id, email, password_hash, full_name, role) VALUES (?, ?, ?, ?, ?, 'Owner')",
+            (user_id, org_id, clean_email, pw_hashed, full_name)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    
+    return {"success": True, "user_id": user_id, "org_id": org_id, "email": clean_email, "message": "Registration successful"}
+
+@app.post("/api/auth/login")
+async def api_login(
+    email: str = Form(...),
+    password: str = Form(...),
+):
+    clean_email = email.strip().lower()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (clean_email,))
+        user = cursor.fetchone()
+        if not user or not _verify_password(password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        cursor.execute("SELECT * FROM organizations WHERE org_id = ?", (user["org_id"],))
+        org = cursor.fetchone()
+    finally:
+        conn.close()
+    
+    session_token = f"ns_tok_{uuid.uuid4().hex}"
+    return {
+        "success": True,
+        "token": session_token,
+        "user": {
+            "user_id": user["user_id"],
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "role": user["role"],
+        },
+        "organization": dict(org) if org else None
+    }
+
+@app.post("/api/billing/upgrade")
+async def api_billing_upgrade(
+    org_id: str = Form(...),
+    tier: str = Form(...),
+):
+    valid_tiers = {"Free", "Pro", "Enterprise"}
+    if tier not in valid_tiers:
+        raise HTTPException(status_code=400, detail="Invalid subscription tier")
+    
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE organizations SET tier = ?, subscription_status = 'active' WHERE org_id = ?", (tier, org_id))
+        conn.commit()
+    finally:
+        conn.close()
+    
+    return {"success": True, "org_id": org_id, "tier": tier, "message": f"Successfully upgraded to {tier} tier."}
+
+@app.get("/api/webhooks/{org_id}")
+async def api_get_webhooks(org_id: str):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT webhook_id, url, events, enabled, created_at FROM webhook_configs WHERE org_id = ?", (org_id,))
+        hooks = [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+    return hooks
+
+@app.post("/api/webhooks")
+async def api_create_webhook(
+    org_id: str = Form(...),
+    url: str = Form(...),
+    events: Optional[str] = Form("all"),
+):
+    webhook_id = f"HOOK-{uuid.uuid4().hex[:8]}"
+    secret = secrets.token_hex(20)
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO webhook_configs (webhook_id, org_id, url, secret, events, enabled) VALUES (?, ?, ?, ?, ?, 1)",
+            (webhook_id, org_id, url, secret, events)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"success": True, "webhook_id": webhook_id, "secret": secret, "message": "Webhook registered successfully"}
+
+

@@ -211,6 +211,63 @@ def init_db_conn(conn: sqlite3.Connection) -> None:
         """
     )
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS organizations (
+            org_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            tier TEXT DEFAULT 'Free',
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            subscription_status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            org_id TEXT REFERENCES organizations(org_id),
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            full_name TEXT,
+            role TEXT DEFAULT 'Analyst',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS webhook_configs (
+            webhook_id TEXT PRIMARY KEY,
+            org_id TEXT REFERENCES organizations(org_id),
+            url TEXT NOT NULL,
+            secret TEXT,
+            events TEXT DEFAULT 'all',
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO organizations (org_id, name, tier, subscription_status)
+        VALUES ('ORG-DEFAULT', 'Default Organization', 'Pro', 'active')
+        """
+    )
+    default_pw_hash = "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW"
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO users (user_id, org_id, email, password_hash, full_name, role)
+        VALUES ('USER-ADMIN', 'ORG-DEFAULT', 'admin@netsentinel.internal', ?, 'System Administrator', 'Owner')
+        """,
+        (default_pw_hash,)
+    )
+
     # Seed default detection rules
     default_rules = [
         ("RULE-PORT-SCAN", "Rapid SYN / Port Scan Indicator", "PORT_SCAN", "HIGH", 0.90, "Detects high volume of distinct destination ports probed from a single source IP."),
