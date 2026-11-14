@@ -201,6 +201,15 @@ async def api_health():
     }
 
 
+@app.get("/google6c70fb81a1f430ae.html")
+async def google_site_verification():
+    """Google Search Console verification file."""
+    path = STATIC_DIR / "google6c70fb81a1f430ae.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(path, media_type="text/html")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     template_name = "landing.html" if (TEMPLATES_DIR / "landing.html").is_file() else "index.html"
